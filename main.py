@@ -57,7 +57,7 @@ else:
 
 # ── OpenAI / Whisper (optional) ─────────────────────────────────────
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()
+AI_PROVIDER = os.getenv("AI_PROVIDER", "groq").lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv(
@@ -236,19 +236,44 @@ class OrderRequest(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    """Check if Ollama and the model are reachable."""
+
+    if AI_PROVIDER == "groq":
+        if GROQ_API_KEY:
+            return JSONResponse(
+                content={
+                    "provider": "Groq",
+                    "status": "running",
+                    "model": GROQ_MODEL
+                }
+            )
+        return JSONResponse(
+            content={
+                "provider": "Groq",
+                "status": "API key missing"
+            },
+            status_code=503
+        )
+
+    # Ollama health check
     try:
         r = requests.get("http://localhost:11434/api/tags", timeout=3)
         models = [m["name"] for m in r.json().get("models", [])]
-        llama_ok = any("llama3.2" in m for m in models)
-        return JSONResponse(content={
-            "ollama": "running",
-            "llama3.2": "available" if llama_ok else "not found – run: ollama pull llama3.2",
-            "models": models
-        })
+
+        return JSONResponse(
+            content={
+                "provider": "Ollama",
+                "status": "running",
+                "model": OLLAMA_MODEL,
+                "available_models": models
+            }
+        )
+
     except Exception:
         return JSONResponse(
-            content={"ollama": "not running – start with: ollama serve", "llama3.2": "unknown"},
+            content={
+                "provider": "Ollama",
+                "status": "not running"
+            },
             status_code=503
         )
 
