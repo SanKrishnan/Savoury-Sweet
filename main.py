@@ -124,7 +124,7 @@ MENU = {
     "Vada Pav": 16,
     "Cheesy Garlic Bread": 150,
     "Butterscotch Cake": 350,
-    "Alfredo Spaghetti": 250
+    "Alfredo Spaghetti": 250,
     "Chocolate Mousse": 90
 }
 NUMBER_WORDS = {
