@@ -65,20 +65,6 @@
             transform: scale(1) translateY(0);
         }
 
-        /* Call icon */
-        #dock-call-btn {
-            width: 48px; height: 48px;
-            background: linear-gradient(135deg,#059669,#10b981);
-            border-radius: 50%;
-            border: none;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 16px rgba(16,185,129,0.5);
-            transition: transform 0.2s, box-shadow 0.2s;
-            animation: pulse-glow 2s infinite;
-        }
-        #dock-call-btn:hover { transform: scale(1.12); box-shadow: 0 6px 22px rgba(16,185,129,0.65); }
-
         /* Chat bubble */
         #dock-bubble {
             background: white;
@@ -307,12 +293,6 @@
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                 </button>
 
-                <!-- Call Me -->
-                <button id="call-me-btn" class="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-xs font-semibold shadow" title="Get a real call from our AI">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M1.5 4.5a3 3 0 013-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 01-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 006.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 011.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 01-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5z" clip-rule="evenodd"/></svg>
-                    Call Me
-                </button>
-
                 <!-- Minimize -->
                 <button id="minimize-btn" class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Minimize AI panel">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15"/></svg>
@@ -368,11 +348,6 @@
 <!-- ═══════════════════════════════════════════════
      MINIMIZED AI DOCK (fixed bottom-right)
 ═══════════════════════════════════════════════ -->
-<div id="ai-dock">
-    <!-- Call support icon (top) -->
-    <button id="dock-call-btn" title="Call customer support">
-        <img src="/static/Call.png" alt="Call" style="width:26px;height:26px;object-fit:contain;">
-    </button>
     <!-- Chat bubble -->
     <div id="dock-bubble">I can help you with ordering.</div>
     <!-- Agent avatar (click to restore) -->
@@ -475,9 +450,6 @@ function restoreAI() {
 
 document.getElementById('minimize-btn').addEventListener('click', minimizeAI);
 document.getElementById('dock-agent-btn').addEventListener('click', restoreAI);
-document.getElementById('dock-call-btn').addEventListener('click', triggerTwilioCall);
-document.getElementById('call-me-btn').addEventListener('click', triggerTwilioCall);
-
 
 // ════════════════════════════════════════════════════════
 // VOICE TOGGLE
@@ -738,25 +710,6 @@ chatForm.addEventListener('submit', e => {
     const text = messageInput.value.trim();
     if (text) sendMessage(text);
 });
-
-
-// ════════════════════════════════════════════════════════
-// TWILIO OUTBOUND CALL
-// ════════════════════════════════════════════════════════
-async function triggerTwilioCall() {
-    try {
-        const res  = await fetch('/call_bakery', { method: 'POST' });
-        const data = await res.json();
-        console.log(data);
-        if (data.error) {
-            appendMessage('📞 Call failed: ' + data.error, false);
-        } else {
-            appendMessage('📞 Ringing your phone now! Pick up to talk to our AI.', false);
-        }
-    } catch (err) {
-        appendMessage('📞 Could not connect to the call service. Please try again.', false);
-    }
-}
 
 // ════════════════════════════════════════════════════════
 // DOWNLOAD CHAT HISTORY
