@@ -67,6 +67,7 @@ Menu:
 - Cheesy Garlic Bread: ₹150
 - Butterscotch Cake: ₹350
 - Alfredo Spaghetti: ₹250
+- Chocolate Mousse: ₹90
 
 Store Hours:
 - Monday-Friday: 10 AM to 9 PM
@@ -124,6 +125,7 @@ MENU = {
     "Cheesy Garlic Bread": 150,
     "Butterscotch Cake": 350,
     "Alfredo Spaghetti": 250
+    "Chocolate Mousse": 90
 }
 NUMBER_WORDS = {
     "one":1,
