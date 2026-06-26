@@ -8,8 +8,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from twilio.twiml.voice_response import VoiceResponse
-from twilio.rest import Client
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from groq import Groq
@@ -42,18 +40,6 @@ app.add_middleware(
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
-# ── Twilio ──────────────────────────────────────────────────────────
-TWILIO_ACCOUNT_SID  = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN   = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_FROM_PHONE   = os.getenv("From_PHONE")
-CUSTOMER_PHONE      = os.getenv("CUSTOMER_PHONE")
-NGROK_URL           = os.getenv("NGROK_URL", "http://localhost:8000")
-
-if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
-    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-else:
-    twilio_client = None
 
 # ── OpenAI / Whisper (optional) ─────────────────────────────────────
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -418,44 +404,29 @@ async def chat_endpoint(request: ChatRequest):
   
 @app.post("/place_order")
 async def place_order(order: OrderRequest):
-
     styles = getSampleStyleSheet()
-
     buffer = io.BytesIO()
-
     doc = SimpleDocTemplate(buffer)
-
     elements = []
-
     elements.append(
         Paragraph("<b>Savoury & Sweet Co.</b>", styles["Title"])
     )
-
     elements.append(
         Paragraph(f"Customer : {order.customer}", styles["Heading2"])
     )
-
     data = [["Item","Qty","Price","Subtotal"]]
-
     total = 0
-
     for item in order.items:
-
         subtotal = item["price"] * item["quantity"]
-
         total += subtotal
-
         data.append([
             item["name"],
             str(item["quantity"]),
             f"₹{item['price']}",
             f"₹{subtotal}"
         ])
-
     data.append(["","","Total",f"₹{total}"])
-
     table = Table(data)
-
     table.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),colors.grey),
         ("TEXTCOLOR",(0,0),(-1,0),colors.whitesmoke),
@@ -464,27 +435,17 @@ async def place_order(order: OrderRequest):
         ("BACKGROUND",(-2,-1),(-1,-1),colors.lightgrey),
         ("ALIGN",(0,0),(-1,-1),"CENTER")
     ]))
-
     elements.append(table)
-
     doc.build(elements)
-
     pdf_bytes = buffer.getvalue()
-
     buffer.close()
-
     safe_name = "".join(
         c for c in order.customer if c.isalnum()
     )
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
     file_name = f"Invoice_{safe_name}_{timestamp}.pdf"
-
     try:
-
         print("Uploading PDF...")
-
         upload = supabase.storage.from_("SweetInvoice").upload(
             path=file_name,
             file=pdf_bytes,
@@ -493,17 +454,12 @@ async def place_order(order: OrderRequest):
                 "upsert": False
             }
         )
-
         print(upload)
         print(type(upload))
-
         print("Upload successful")
-
         invoice_url = supabase.storage.from_("SweetInvoice").get_public_url(file_name)
-
         print(invoice_url)
         print(type(invoice_url))
-
         print(invoice_url)
 
         response = supabase.table("orders").insert({
@@ -514,9 +470,7 @@ async def place_order(order: OrderRequest):
         }).execute()
 
         print(response)
-
         print("Inserted Successfully")
-
         return {
             "status":"success",
             "invoice_url":invoice_url
@@ -564,76 +518,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
         print(f"Whisper error: {e}")
         # Return an 'error' key (not a 500) so the browser JS silently falls back to Web Speech API
         return JSONResponse(content={"error": "Whisper unavailable", "detail": str(e)}, status_code=200)
-
-
-# ════════════════════════════════════════════════════════════════════
-#  TWILIO TELEPHONY ENDPOINTS
-# ════════════════════════════════════════════════════════════════════
-
-@app.post("/call_bakery")
-async def initiate_call(request: Request):
-    """Initiates an outbound call to the customer via Twilio."""
-    if not twilio_client:
-        return JSONResponse(
-            content={"error": "Twilio credentials not configured. Please add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, From_PHONE, and CUSTOMER_PHONE to your .env file."},
-            status_code=503,
-        )
-    if not CUSTOMER_PHONE or not TWILIO_FROM_PHONE:
-        return JSONResponse(
-            content={"error": "CUSTOMER_PHONE or From_PHONE not set in .env"},
-            status_code=503,
-        )
-    try:
-        call = twilio_client.calls.create(
-            to=CUSTOMER_PHONE,
-            from_=TWILIO_FROM_PHONE,
-            url=f"{NGROK_URL}/voice",
-        )
-        return JSONResponse(content={"status": "calling", "sid": call.sid})
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-@app.api_route("/voice", methods=["GET", "POST"])
-async def voice_webhook(request: Request):
-    response = VoiceResponse()
-    gather = response.gather(
-        input="speech",
-        action="/process_speech",
-        timeout=5,
-        speechTimeout="auto",
-        language="en-IN",
-    )
-    gather.say("Welcome to Savoury and Sweet Company! How can I help you today?", voice="Polly.Aditi")
-    response.redirect("/voice")
-    return HTMLResponse(content=str(response), media_type="application/xml")
-
-
-@app.api_route("/process_speech", methods=["GET", "POST"])
-async def process_speech(request: Request):
-    form_data = await request.form()
-    user_speech = form_data.get("SpeechResult", "")
-    call_sid = form_data.get("CallSid", "unknown_call")
-
-    response = VoiceResponse()
-    if user_speech:
-        ai_reply = get_ai_response(call_sid, user_speech)
-        gather = response.gather(
-            input="speech",
-            action="/process_speech",
-            timeout=5,
-            speechTimeout="auto",
-            language="en-IN",
-        )
-        gather.say(ai_reply, voice="Polly.Aditi")
-        response.say("Thank you for calling. Goodbye!", voice="Polly.Aditi")
-        response.hangup()
-    else:
-        response.say("I didn't quite catch that. Could you say that again?", voice="Polly.Aditi")
-        response.redirect("/voice")
-
-    return HTMLResponse(content=str(response), media_type="application/xml")
-
 
 # ════════════════════════════════════════════════════════════════════
 #  SERVER ENTRY POINT
