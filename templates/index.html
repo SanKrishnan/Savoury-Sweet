@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Savoury &amp; Sweet Co. – AI Bakery</title>
+    <meta name="description" content="Order fresh artisanal baked goods from Savoury & Sweet Co. and get help from our AI assistant.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ── Base ────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; font-family: 'Inter', sans-serif; background: #f8fafc; }
+
+        /* ── Animations ──────────────────────────────────────── */
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+            50%       { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(-6px); }
+        }
+        @keyframes bounce-in {
+            0%   { transform: scale(0.5); opacity: 0; }
+            70%  { transform: scale(1.08); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .chat-bubble  { animation: fadeSlideIn 0.3s ease-out; }
+        .loader       { border: 3px solid #e5e7eb; border-top-color: #10b981; border-radius: 50%; width: 20px; height: 20px; animation: spin 0.8s linear infinite; }
+        .menu-item    { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .menu-item:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -4px rgba(0,0,0,0.12); }
+
+        /* ── Layout ──────────────────────────────────────────── */
+        #app-shell  { display: flex; height: 100vh; overflow: hidden; }
+        #left-panel { flex: 0 0 50%; overflow-y: auto; transition: flex 0.35s cubic-bezier(0.4,0,0.2,1); }
+        #left-panel.full-width { flex: 0 0 100%; }
+        #ai-panel   { flex: 0 0 50%; display: flex; flex-direction: column; transition: flex 0.35s cubic-bezier(0.4,0,0.2,1); background: #f0f4f8; }
+        #ai-panel.collapsed { flex: 0 0 0%; overflow: hidden; }
+
+        /* ── Minimized side dock ─────────────────────────────── */
+        #ai-dock {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(0.7) translateY(20px);
+            transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        #ai-dock.visible {
+            opacity: 1;
+            pointer-events: all;
+            transform: scale(1) translateY(0);
+        }
+
+        /* Call icon */
+        #dock-call-btn {
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg,#059669,#10b981);
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(16,185,129,0.5);
+            transition: transform 0.2s, box-shadow 0.2s;
+            animation: pulse-glow 2s infinite;
+        }
+        #dock-call-btn:hover { transform: scale(1.12); box-shadow: 0 6px 22px rgba(16,185,129,0.65); }
+
+        /* Chat bubble */
+        #dock-bubble {
+            background: white;
+            border-radius: 18px 18px 18px 4px;
+            padding: 10px 14px;
+            font-size: 12px;
+            color: #1f2937;
+            font-weight: 500;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            white-space: nowrap;
+            position: relative;
+        }
+        #dock-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px; left: 14px;
+            border: 8px solid transparent;
+            border-top-color: white;
+            border-bottom: 0;
+        }
+
+        /* Agent avatar button */
+        #dock-agent-btn {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            border: 3px solid white;
+            cursor: pointer;
+            overflow: hidden;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+            background: #10b981;
+            transition: transform 0.25s, box-shadow 0.25s;
+            animation: float 3s ease-in-out infinite;
+        }
+        #dock-agent-btn:hover { transform: scale(1.1); box-shadow: 0 10px 28px rgba(0,0,0,0.25); animation: none; }
+        #dock-agent-btn img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Voice toggle */
+        #voice-toggle:checked + .toggle-track { background: #10b981; }
+        .toggle-track { transition: background 0.2s; }
+        .toggle-knob { transition: transform 0.2s; }
+        #voice-toggle:checked ~ .toggle-knob,
+        .toggle-knob.active { transform: translateX(1.25rem); }
+
+        /* Mic button states */
+        #mic-btn.recording {
+            background: #ef4444;
+            color: white;
+            animation: pulse-glow 1s infinite;
+        }
+
+        /* ── Scrollbar ───────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+    </style>
+</head>
+<body>
+
+<div id="app-shell">
+
+    <!-- ═══════════════════════════════════════════════
+         LEFT PANEL: Storefront & Menu
+    ═══════════════════════════════════════════════ -->
+    <div id="left-panel" class="border-r border-gray-200 bg-white p-6 flex flex-col">
+
+        <!-- Header -->
+        <div class="mb-7 border-b border-gray-100 pb-5">
+            <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Savoury &amp; Sweet Co.</h1>
+            <p class="text-gray-500 mt-2 text-sm leading-relaxed">
+                Artisanal bakes, crafted fresh every morning. Browse below, add items to your basket,
+                and let our AI assistant help you build the perfect order.
+            </p>
+        </div>
+
+        <!-- Menu Grid -->
+        <h2 class="text-base font-semibold text-gray-700 mb-3 uppercase tracking-wide">Freshly Baked Menu</h2>
+        <div class="grid grid-cols-4 gap-3 mb-5 flex-1">
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/chocolate_cake.png" alt="Chocolate Cake" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Cake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹500</p>
+                <button onclick="addToCart('Chocolate Cake', 500)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/vanilla_cupcakes.png" alt="Vanilla Cupcakes" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Vanilla Cupcakes (6)</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹300</p>
+                <button onclick="addToCart('Vanilla Cupcakes (6)', 300)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/butter_croissant.png" alt="Butter Croissant" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Butter Croissant</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹150</p>
+                <button onclick="addToCart('Butter Croissant', 150)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/savoury_tart.png" alt="Savoury Tart" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Savoury Tart</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹250</p>
+                <button onclick="addToCart('Savoury Tart', 250)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/Butterscotch Cake.jpg" alt="Butterscotch Cake" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Butterscotch Cake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹350</p>
+                <button onclick="addToCart('Butterscotch Cake',350)"
+                    class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">
+                    Add to Basket
+                </button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/samosa.png" alt="Samosa" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Samosa</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹20</p>
+                <button onclick="addToCart('Samosa', 20)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/schezwan_vada_pav.png" alt="Vada Pav" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Vada Pav</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹16</p>
+                <button onclick="addToCart('Vada Pav', 16)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+            <img src="/static/Garlic bread.jpg"alt="Cheesy Garlic Bread" class="w-full h-56 object-cover rounded-xl mb-2">
+            <h3 class="font-semibold text-gray-800 text-sm">Cheesy Garlic Bread</h3>
+            <p class="text-emerald-600 font-bold mb-2 mt-1">₹150</p>
+            <button onclick="addToCart('Cheesy Garlic Bread',150)"
+                class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">
+                Add to Basket
+            </button>
+            </div>
+
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+            <img src="/static/alfredopasta.png" alt="Alfredo Spaghetti" class="w-full h-56 object-cover rounded-xl mb-2">
+            <h3 class="font-semibold text-gray-800 text-sm">Alfredo Spaghetti </h3>
+            <p class="text-emerald-600 font-bold mb-2 mt-1">₹250</p>
+            <button onclick="addToCart('Alfredo Spaghetti',250)"
+                class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">
+                Add to Basket
+            </button>
+            </div>
+
+
+        </div>
+
+        <!-- Basket Summary -->
+        <div class="bg-gray-900 text-white rounded-2xl p-5 shadow-xl mt-auto">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-3">
+                <h3 class="font-semibold text-base">Your Basket</h3>
+                <button id="clear-cart-btn" class="text-xs bg-red-500 hover:bg-red-600 transition-colors px-3 py-1 rounded-full font-medium">Clear All</button>
+            </div>
+            <div id="cart-items" class="space-y-1.5 mb-4 text-sm text-gray-300 min-h-[40px]">
+                <p class="italic text-gray-500">Your basket is empty.</p>
+            </div>
+            <div class="mt-4"><button id="place-order" class="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-2 font-semibold">
+                Place Order
+            </button></div>
+            <div class="flex justify-between items-end border-t border-gray-700 pt-3">
+                <div>
+                    <p class="text-xs text-gray-400" id="prep-time">Prep Time: --</p>
+                    <p class="text-xs text-gray-400 mt-1" id="special-note">Add items to see estimates.</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-400">Total Due</p>
+                    <p class="text-2xl font-extrabold text-emerald-400" id="cart-total">₹0</p>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /left-panel -->
+
+
+    <!-- ═══════════════════════════════════════════════
+         RIGHT PANEL: AI Assistant
+    ═══════════════════════════════════════════════ -->
+    <div id="ai-panel">
+
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 px-4 py-3 shadow-sm flex items-center justify-between z-10 flex-shrink-0">
+            <div class="flex items-center gap-3">
+                <img src="/static/Agent.png" alt="AI Agent" class="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-300">
+                <div>
+                    <h2 class="text-sm font-bold text-gray-900">AI Concierge</h2>
+                    <p class="text-emerald-600 text-xs font-medium flex items-center gap-1">
+                        <span class="relative flex h-2 w-2">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        Online &amp; Ready
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Accent / mode selector -->
+                <select id="accent-select" class="border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-gray-600 focus:outline-none focus:border-emerald-400" title="Speech language">
+                    <option value="en-IN" selected>🇮🇳 India</option>
+                    <option value="en-US">🇺🇸 US</option>
+                    <option value="en-GB">🇬🇧 UK</option>
+                </select>
+                <select id="stt-mode" class="border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-gray-600 focus:outline-none focus:border-emerald-400" title="Transcription mode">
+                    <option value="browser">Browser STT</option>
+                    <option value="whisper">Whisper (High Accuracy)</option>
+                </select>
+
+                <!-- Voice reply toggle -->
+                <label class="flex items-center gap-1.5 cursor-pointer" title="Audio reply">
+                    <span class="text-xs text-gray-500 font-medium">Audio</span>
+                    <div class="relative">
+                        <input type="checkbox" id="voice-toggle" class="sr-only" checked>
+                        <div id="toggle-track" class="w-9 h-5 rounded-full bg-emerald-500 transition-colors duration-200"></div>
+                        <div id="toggle-knob" class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 translate-x-4"></div>
+                    </div>
+                </label>
+
+                <!-- Save chat -->
+                <button onclick="downloadChatHistory()" class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Save chat log">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                </button>
+
+                <!-- Call Me -->
+                <button id="call-me-btn" class="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-xs font-semibold shadow" title="Get a real call from our AI">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M1.5 4.5a3 3 0 013-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 01-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 006.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 011.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 01-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5z" clip-rule="evenodd"/></svg>
+                    Call Me
+                </button>
+
+                <!-- Minimize -->
+                <button id="minimize-btn" class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Minimize AI panel">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Chat messages -->
+        <main class="flex-1 overflow-y-auto p-5 space-y-4" id="chat-container">
+            <!-- Welcome message -->
+            <div class="flex gap-3">
+                <img src="/static/Agent.png" alt="AI" class="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-0.5">
+                <div class="chat-bubble bg-white border border-gray-200 text-gray-800 p-3 px-4 rounded-2xl rounded-tl-none shadow-sm text-sm max-w-xs">
+                    Hi! I'm the Savoury &amp; Sweet Co. AI. Add items on the left and ask me anything about your order! 🎂
+                </div>
+            </div>
+        </main>
+
+        <!-- Typing indicator -->
+        <div id="typing-indicator" class="hidden px-5 pb-2 flex gap-3">
+            <img src="/static/Agent.png" alt="AI" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
+            <div class="chat-bubble bg-white border border-gray-200 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1.5">
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+            </div>
+        </div>
+
+        <!-- Input area -->
+        <footer class="bg-white border-t border-gray-200 p-3 flex-shrink-0">
+            <form id="chat-form" class="flex gap-2">
+                <button type="button" id="mic-btn" class="p-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors focus:outline-none flex-shrink-0" title="Click to speak">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/>
+                    </svg>
+                </button>
+                <input type="text" id="message-input"
+                    class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 bg-gray-50"
+                    placeholder="Ask about your order..." autocomplete="off">
+                <button type="submit" class="p-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors focus:outline-none flex-shrink-0 shadow-sm">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"/>
+                    </svg>
+                </button>
+            </form>
+        </footer>
+
+    </div><!-- /ai-panel -->
+
+</div><!-- /app-shell -->
+
+
+<!-- ═══════════════════════════════════════════════
+     MINIMIZED AI DOCK (fixed bottom-right)
+═══════════════════════════════════════════════ -->
+<div id="ai-dock">
+    <!-- Call support icon (top) -->
+    <button id="dock-call-btn" title="Call customer support">
+        <img src="/static/Call.png" alt="Call" style="width:26px;height:26px;object-fit:contain;">
+    </button>
+    <!-- Chat bubble -->
+    <div id="dock-bubble">I can help you with ordering.</div>
+    <!-- Agent avatar (click to restore) -->
+    <button id="dock-agent-btn" title="Open AI assistant">
+        <img src="/static/Agent.png" alt="AI Agent">
+    </button>
+</div>
+
+
+<script>
+// ════════════════════════════════════════════════════════
+// CART LOGIC
+// ════════════════════════════════════════════════════════
+let cart = [];
+
+const cartItemsDiv  = document.getElementById('cart-items');
+const cartTotalEl   = document.getElementById('cart-total');
+const prepTimeEl    = document.getElementById('prep-time');
+const specialNoteEl = document.getElementById('special-note');
+const clearCartBtn  = document.getElementById('clear-cart-btn');
+
+function addToCart(name, price) {
+    const existing = cart.find(i => i.name === name);
+    if (existing) {
+        existing.quantity += 1;
+    } else {
+        cart.push({ name, price, quantity: 1 });
+    }
+    renderCart();
+}
+
+function clearCart() {
+    cart = [];
+    renderCart();
+}
+
+function removeItem(name){
+    cart = cart.filter(item=>item.name!==name);
+    renderCart();
+
+}
+
+clearCartBtn.addEventListener('click', clearCart);
+
+function renderCart() {
+    if (cart.length === 0) {
+        cartItemsDiv.innerHTML = '<p class="italic text-gray-500">Your basket is empty.</p>';
+        cartTotalEl.textContent = '₹0';
+        prepTimeEl.textContent  = 'Prep Time: --';
+        specialNoteEl.textContent = 'Add items to see estimates.';
+        return;
+    }
+    let total = 0, totalQty = 0, html = '';
+    cart.forEach(item => {
+        total    += item.price * item.quantity;
+        totalQty += item.quantity;
+        html += `<div class="flex justify-between items-center">
+        <div>
+        ${item.quantity} × ${item.name}
+        </div>
+        <div class="flex items-center gap-2">
+        <span>₹${item.price*item.quantity}</span>
+        <button
+        onclick="removeItem('${item.name}')"
+        class="bg-red-500 text-white px-2 rounded">✕</button>
+        </div>
+        </div>
+        `;
+    });
+    cartItemsDiv.innerHTML = html;
+    cartTotalEl.textContent = `₹${total}`;
+    if (totalQty > 5) {
+        prepTimeEl.textContent    = 'Prep Time: ~45 mins (Large Order)';
+        specialNoteEl.textContent = 'Large orders need extra care – thank you for your patience!';
+    } else {
+        prepTimeEl.textContent    = 'Prep Time: ~20 mins';
+        specialNoteEl.textContent = 'Getting your freshly baked goods ready quickly!';
+    }
+}
+
+
+// ════════════════════════════════════════════════════════
+// MINIMIZE / RESTORE AI PANEL
+// ════════════════════════════════════════════════════════
+const aiPanel   = document.getElementById('ai-panel');
+const leftPanel = document.getElementById('left-panel');
+const aiDock    = document.getElementById('ai-dock');
+
+function minimizeAI() {
+    aiPanel.classList.add('collapsed');
+    leftPanel.classList.add('full-width');
+    aiDock.classList.add('visible');
+}
+
+function restoreAI() {
+    aiPanel.classList.remove('collapsed');
+    leftPanel.classList.remove('full-width');
+    aiDock.classList.remove('visible');
+}
+
+document.getElementById('minimize-btn').addEventListener('click', minimizeAI);
+document.getElementById('dock-agent-btn').addEventListener('click', restoreAI);
+document.getElementById('dock-call-btn').addEventListener('click', triggerTwilioCall);
+document.getElementById('call-me-btn').addEventListener('click', triggerTwilioCall);
+
+
+// ════════════════════════════════════════════════════════
+// VOICE TOGGLE
+// ════════════════════════════════════════════════════════
+const voiceToggle = document.getElementById('voice-toggle');
+const toggleKnob  = document.getElementById('toggle-knob');
+const toggleTrack = document.getElementById('toggle-track');
+
+voiceToggle.addEventListener('change', function () {
+    if (this.checked) {
+        toggleKnob.style.transform  = 'translateX(1.25rem)';
+        toggleTrack.style.background = '#10b981';
+    } else {
+        toggleKnob.style.transform  = 'translateX(0)';
+        toggleTrack.style.background = '#d1d5db';
+        if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+    }
+});
+// Set initial state (checked by default)
+toggleKnob.style.transform  = 'translateX(1.25rem)';
+toggleTrack.style.background = '#10b981';
+
+
+// ════════════════════════════════════════════════════════
+// SPEECH SYNTHESIS (Text-to-Speech)
+// ════════════════════════════════════════════════════════
+function speak(text) {
+    if (!voiceToggle.checked) return;
+    const synth = window.speechSynthesis;
+    if (synth.speaking) synth.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    const voices = synth.getVoices();
+    const preferred = voices.find(v =>
+        v.name.includes('Google UK English Female') ||
+        v.name.includes('Female') ||
+        v.name.includes('India') ||
+        v.lang === 'en-IN'
+    );
+    if (preferred) utt.voice = preferred;
+    utt.rate = 0.95;
+    synth.speak(utt);
+}
+// Populate voices once loaded
+if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+
+// ════════════════════════════════════════════════════════
+// SPEECH RECOGNITION (Browser STT + Whisper fallback)
+// ════════════════════════════════════════════════════════
+const accentSelect = document.getElementById('accent-select');
+const sttModeSelect = document.getElementById('stt-mode');
+const micBtn        = document.getElementById('mic-btn');
+const messageInput  = document.getElementById('message-input');
+
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+let isRecording       = false;
+let mediaRecorder     = null;
+let audioChunks       = [];
+
+// ── Browser STT path ────────────────────────────────────
+function startBrowserSTT() {
+    if (!SpeechRecognitionAPI) {
+        appendMessage('Your browser does not support speech recognition. Please type your message.', false);
+        return;
+    }
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous    = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 3;
+    recognition.lang = accentSelect.value;
+
+    recognition.onstart = () => {
+        isRecording = true;
+        micBtn.classList.add('recording');
+    };
+    recognition.onresult = (event) => {
+        // Use the best alternative
+        const transcript = event.results[0][0].transcript;
+        messageInput.value = transcript;
+        sendMessage(transcript);
+    };
+    recognition.onerror = () => {
+        isRecording = false;
+        micBtn.classList.remove('recording');
+    };
+    recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.remove('recording');
+    };
+    recognition.start();
+}
+
+// ── Whisper STT path (server-side, high accuracy) ───────
+async function startWhisperSTT() {
+    // If no mediaDevices support, silently fall back to browser STT
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+        sttModeSelect.value = 'browser';
+        startBrowserSTT();
+        return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg' });
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('file', blob, 'audio.webm');
+            try {
+                const res  = await fetch('/transcribe', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.transcript) {
+                    messageInput.value = data.transcript;
+                    sendMessage(data.transcript);
+                } else {
+                    // Whisper unavailable (no API key) – silently fall back, update dropdown
+                    sttModeSelect.value = 'browser';
+                    micBtn.title = 'Browser speech recognition (Whisper unavailable – set OPENAI_API_KEY in .env)';
+                    startBrowserSTT();
+                }
+            } catch (err) {
+                // Network error – silently fall back
+                sttModeSelect.value = 'browser';
+                startBrowserSTT();
+            }
+        };
+        mediaRecorder.start();
+        isRecording = true;
+        micBtn.classList.add('recording');
+    } catch (err) {
+        // Mic denied – let browser STT handle the permission prompt instead
+        sttModeSelect.value = 'browser';
+        startBrowserSTT();
+    }
+}
+
+function stopWhisperSTT() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    isRecording = false;
+    micBtn.classList.remove('recording');
+}
+
+micBtn.addEventListener('click', () => {
+    if (isRecording) {
+        if (sttModeSelect.value === 'whisper') {
+            stopWhisperSTT();
+        } else {
+            // Browser STT stops on its own via onend
+            isRecording = false;
+            micBtn.classList.remove('recording');
+        }
+        return;
+    }
+    if (sttModeSelect.value === 'whisper') {
+        startWhisperSTT();
+    } else {
+        startBrowserSTT();
+    }
+});
+
+
+// ════════════════════════════════════════════════════════
+// CHAT MESSAGING
+// ════════════════════════════════════════════════════════
+const chatContainer    = document.getElementById('chat-container');
+const typingIndicator  = document.getElementById('typing-indicator');
+const chatForm         = document.getElementById('chat-form');
+let chatHistoryLog = 'Savoury & Sweet Co. – Chat Transcript\n=======================================\n\n';
+
+function appendMessage(text, isUser = false) {
+    chatHistoryLog += `${isUser ? 'You' : 'AI'}: ${text}\n`;
+    const wrapper = document.createElement('div');
+    wrapper.className = `flex gap-3 ${isUser ? 'justify-end' : ''}`;
+
+    if (isUser) {
+        wrapper.innerHTML = `
+            <div class="chat-bubble bg-gray-900 text-white p-3 px-4 rounded-2xl rounded-tr-none shadow-sm text-sm max-w-xs">${text}</div>
+            <div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">YOU</div>`;
+    } else {
+        wrapper.innerHTML = `
+            <img src="/static/Agent.png" alt="AI" class="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-0.5">
+            <div class="chat-bubble bg-white border border-gray-200 text-gray-800 p-3 px-4 rounded-2xl rounded-tl-none shadow-sm text-sm max-w-xs">${text}</div>`;
+    }
+    chatContainer.appendChild(wrapper);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+async function sendMessage(text) {
+    if (!text.trim()) return;
+    appendMessage(text, true);
+    messageInput.value = "";
+    typingIndicator.classList.remove("hidden");
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    try {
+        const res = await fetch("/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: text,
+                cart: cart
+            })
+        });
+        const data = await res.json();
+        typingIndicator.classList.add("hidden");
+        if (data.actions) {
+            data.actions.forEach(action => {
+                if (action.action === "add") {
+                    const existing = cart.find(i => i.name === action.item);
+
+                    if (existing) {
+                        existing.quantity += action.quantity;
+                    } else {
+                        cart.push({
+                            name: action.item,
+                            price: action.price,
+                            quantity: action.quantity
+                        });
+                    }
+
+                    renderCart();
+                }
+                if (action.action === "remove") {
+                    removeItem(action.item);
+                }
+                if (action.action === "clear_cart") {
+                    clearCart();
+                }
+                if (action.action === "place_order") {
+                    placeOrder(action.customer);
+                }
+                if (action.action === "keep_only") {
+                    cart = action.new_cart;
+                    renderCart();
+                }
+            });
+        }
+        appendMessage(data.response);
+        speak(data.response);
+    } catch (err) {
+        typingIndicator.classList.add("hidden");
+        appendMessage(
+            "Sorry, I am having trouble connecting to the server.",
+            false
+        );
+    }
+}
+
+chatForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = messageInput.value.trim();
+    if (text) sendMessage(text);
+});
+
+
+// ════════════════════════════════════════════════════════
+// TWILIO OUTBOUND CALL
+// ════════════════════════════════════════════════════════
+async function triggerTwilioCall() {
+    try {
+        const res  = await fetch('/call_bakery', { method: 'POST' });
+        const data = await res.json();
+        console.log(data);
+        if (data.error) {
+            appendMessage('📞 Call failed: ' + data.error, false);
+        } else {
+            appendMessage('📞 Ringing your phone now! Pick up to talk to our AI.', false);
+        }
+    } catch (err) {
+        appendMessage('📞 Could not connect to the call service. Please try again.', false);
+    }
+}
+
+// ════════════════════════════════════════════════════════
+// DOWNLOAD CHAT HISTORY
+// ════════════════════════════════════════════════════════
+function downloadChatHistory() {
+    const blob = new Blob([chatHistoryLog], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `SavourySweet_Chat_${new Date().toISOString().slice(0,10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+async function placeOrder(customer){
+    const response = await fetch("/place_order",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+            customer,
+            items:cart
+        })
+    });
+    const data = await response.json();
+    alert("Order placed successfully!");
+    window.open(data.invoice_url, "_blank");
+    cart=[];
+    renderCart();
+}
+
+// ════════════════════════════════════════════════════════
+// STARTUP HEALTH CHECK (Ollama status banner)
+// ════════════════════════════════════════════════════════
+function showBanner(html, type) {
+    const existing = document.getElementById('health-banner');
+    if (existing) existing.remove();
+    const banner = document.createElement('div');
+    banner.id = 'health-banner';
+    const bg     = type === 'warning' ? '#fefce8' : '#f0fdf4';
+    const border = type === 'warning' ? '#fde047' : '#86efac';
+    const color  = type === 'warning' ? '#92400e' : '#166534';
+    banner.style.cssText = [
+        'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+        `background:${bg}`, `border-bottom:2px solid ${border}`, `color:${color}`,
+        'padding:10px 16px', 'font-size:13px', 'font-family:Inter,sans-serif',
+        'display:flex', 'align-items:center', 'justify-content:space-between', 'gap:12px'
+    ].join(';');
+    banner.innerHTML = `<span>${html}</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:18px;line-height:1;color:${color};">&#x2715;</button>`;
+    document.body.prepend(banner);
+}
+
+async function checkOllamaHealth() {
+    try {
+        const res  = await fetch('/health');
+        const data = await res.json();
+        if (data.ollama !== 'running') {
+            showBanner(
+                '&#9888; Ollama is not running. Open a terminal and run: <strong>ollama serve</strong> — then: <strong>ollama run llama3.2</strong>',
+                'warning'
+            );
+        } else if (data['llama3.2'] && data['llama3.2'].includes('not found')) {
+            showBanner(
+                '&#9888; Llama 3.2 not found. Run in terminal: <strong>ollama pull llama3.2</strong>',
+                'warning'
+            );
+        }
+    } catch (_) { /* server unreachable, skip */ }
+}
+
+// Run 1 second after page loads
+setTimeout(checkOllamaHealth, 1000);
+</script>
+</body>
+</html>
