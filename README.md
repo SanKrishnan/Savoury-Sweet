@@ -1,137 +1,307 @@
 # 🧁 Savoury & Sweet Co. — AI Bakery Assistant
-### *A Hybrid Local-First & Production-Grade Conversational Voice Platform*
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-brightgreen?style=for-the-badge&logo=render&logoColor=white)](https://savoury-sweet.onrender.com/)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![LLM Engine](https://img.shields.io/badge/AI%20Engine-Llama%203.2%20%2F%203.3-blueviolet?style=for-the-badge&logo=meta&logoColor=white)](#-dual-environment-engine-ollama--groq)
+### *A Hybrid Local-First & Production-Grade Conversational AI Ordering Platform*
 
-**Live Production Link:** [savoury-sweet.onrender.com](https://savoury-sweet.onrender.com/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-brightgreen?style=for-the-badge\&logo=vercel\&logoColor=white)](https://savoury-sweet.vercel.app/)
+[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge\&logo=fastapi\&logoColor=white)](https://fastapi.tiangolo.com/)
+[![AI Engine](https://img.shields.io/badge/AI%20Engine-Llama%203.2%20%2F%203.3-blueviolet?style=for-the-badge\&logo=meta\&logoColor=white)](#-dual-environment-engine)
 
----
-
-## 🌟 Overview & Architecture Highlight
-**Savoury & Sweet Co.** is a hybrid Conversational AI platform engineered to showcase production-grade GenAI patterns. Designed for a boutique bakery, it handles real-time voice and text orders, manages active baskets, and dynamically outputs PDF invoices stored securely in the cloud.
-
-The platform is architected around a dual runtime strategy specifically tailored to balance local developer environments with high-performance production hosting.
+**🌐 Live Demo:** https://savoury-sweet.vercel.app/
 
 ---
 
-## ⚡ Dual-Environment Engine (Ollama & Groq)
-To showcase operational flexibility and cloud cost-efficiency, the system employs two distinct AI backends:
+# 🌟 Overview
+
+**Savoury & Sweet Co.** is an AI-powered conversational bakery ordering platform that enables customers to browse a bakery menu, place orders using natural language or voice, and automatically generate invoices stored securely in the cloud.
+
+The application combines modern web technologies with Large Language Models to provide a natural ordering experience across desktop and mobile devices.
+
+---
+
+# ⚡ Dual-Environment AI Engine
+
+To balance offline development and cloud deployment, the application supports two AI providers.
 
 ```mermaid
 graph TD
-    A[User Request] --> B{Environment}
-    B -- Local Development --> C[Ollama - Llama 3.2]
-    B -- Production / Cloud --> D[Groq Cloud - Llama 3.3 70B]
-    C --> E[FastAPI Engine]
-    D --> E[FastAPI Engine]
-    E --> F[Supabase Cloud Database & Storage]
+    A[Customer] --> B{AI Provider}
+    B -->|Local| C[Ollama - Llama 3.2]
+    B -->|Production| D[Groq - Llama 3.3 70B]
+    C --> E[FastAPI Backend]
+    D --> E
+    E --> F[Supabase Database]
+    E --> G[Supabase Storage]
 ```
 
-1. **Local Environment (Offline-First)**: Powered by **Ollama running Llama 3.2** locally on the developer machine. This guarantees zero API costs and full offline functionality during prototyping and feature development.
-2. **Production Environment (Global Cloud)**: Hosted live on Render and powered by **Groq Cloud (running Llama 3.3 70B)**. This delivers near-zero latency responses (<500ms token generation), essential for providing a natural, lag-free voice conversational experience.
+### Local Development
+
+* Ollama
+* Llama 3.2
+* Offline development
+* Zero API cost
+
+### Production
+
+* Groq API
+* Llama 3.3 70B
+* Fast inference
+* Cloud hosted
 
 ---
 
-## 🚀 Key Features & Advanced Patterns
+# 🚀 Features
 
-*   **Hybrid Telephony Integration**: Ready-to-go webhook integration with **Twilio Voice** for handling inbound phone calls with dynamic real-time speech responses.
-*   **Dual Speech Transcription Systems**:
-    *   *High-Accuracy Cloud Mode*: Integrates with **OpenAI Whisper** (`whisper-1`) with specific hints tuned for multilingual Indian English and Hindi vocabularies.
-    *   *Free Client-Side Fallback*: Employs browser-native Web Speech APIs (`SpeechRecognition` & `SpeechSynthesis`) to ensure 100% uptime and zero API reliance if credentials are not configured.
-*   **Structured PDF Invoicing**: Leverages `ReportLab` to construct dynamic invoice documents containing structured tables, exact item quantities, subtotals, and totals.
-*   **Cloud Infrastructure**: Fully integrated with **Supabase** for database management and persistent cloud PDF object storage.
+### 🤖 AI Ordering Assistant
 
----
+* Conversational food ordering
+* Natural language understanding
+* Voice-enabled ordering
+* Multi-turn conversations
+* Dynamic shopping basket
 
-## 🛠️ Tech Stack & Services
-*   **Framework**: FastAPI (Python)
-*   **Database & Object Storage**: Supabase
-*   **AI Providers**: Groq API (Production) & Ollama (Local Development)
-*   **Orchestration & Tools**: ReportLab (PDF compiler), Jinja2 (HTML Templates), Twilio SDK
-*   **Hosting**: Render (Live Environment)
+### 🍰 Intelligent Product Assistant
 
----
+The AI can answer questions such as:
 
-## 📦 Installation & Setup
+* How does Chocolate Cake taste?
+* Is the Alfredo Spaghetti spicy?
+* What does the Butterscotch Cake look like?
+* Which item would you recommend?
 
-### Prerequisites
-*   **Python 3.8+**
-*   **Ollama**: Install locally from [ollama.com](https://ollama.com/) if testing the offline engine.
-*   **Supabase Account**: Set up a bucket named `SweetInvoice` and an `orders` table.
-
-### Local Setup
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/Sanjana/Savoury-Sweet.git
-    cd Savoury-Sweet-main
-    ```
-
-2.  **Install Required Libraries**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Environment Variables (`.env`)**:
-    Create a `.env` file in the root directory:
-    ```env
-    SUPABASE_URL=your-supabase-project-url
-    SUPABASE_KEY=your-supabase-anon-key
-    AI_PROVIDER=ollama   # Set to 'groq' for cloud mode
-    OLLAMA_MODEL=llama3.2
-    GROQ_API_KEY=your-groq-api-key
-    OPENAI_API_KEY=your-openai-api-key # Optional: For Whisper transcription
-    PORT=8000
-    ```
-
-4.  **Pull Local Model**:
-    ```bash
-    ollama pull llama3.2
-    ```
+It provides natural descriptions of menu items, flavours, textures, ingredients, and recommendations to help customers decide before ordering.
 
 ---
 
-## 🕹️ How to Run & Verify
+### 🛒 Smart Cart Management
 
-### 1. Launch FastAPI Server
+Supports conversational commands like:
+
+* Add 2 Chocolate Cakes
+* Remove Samosa
+* Keep only one Butter Croissant
+* Clear Basket
+* Modify quantities
+
+The basket updates dynamically in real time.
+
+---
+
+### 🎤 Voice Interaction
+
+Supports
+
+* Browser Speech Recognition
+* Browser Speech Synthesis
+* OpenAI Whisper (optional)
+* Voice replies from the AI assistant
+
+---
+
+### 📄 Invoice Generation
+
+After confirmation, the application
+
+* Generates a PDF invoice using ReportLab
+* Uploads the invoice to **Supabase Storage**
+* Stores order details in the **Supabase Orders Table**
+* Returns a public invoice URL
+
+---
+
+### ☁️ Cloud Storage
+
+Supabase is used for
+
+* Orders Table
+* Invoice Storage Bucket
+* Public Invoice URLs
+
+---
+
+### 📱 Responsive Interface
+
+The interface is fully responsive and optimized for
+
+* Desktop
+* Tablets
+* Mobile Phones
+
+Customers can browse the menu, interact with the AI assistant, and place orders seamlessly across different screen sizes.
+
+---
+
+# 🛠 Tech Stack
+
+### Frontend
+
+* HTML5
+* CSS3
+* JavaScript
+* Tailwind CSS
+
+### Backend
+
+* FastAPI
+* Python
+
+### AI
+
+* Groq API
+* Ollama
+* Llama 3.2
+* Llama 3.3 70B
+
+### Cloud
+
+* Supabase Database
+* Supabase Storage
+
+### Utilities
+
+* ReportLab
+* Jinja2
+* Python Speech APIs
+
+### Deployment
+
+* Vercel (Frontend)
+* Render / FastAPI Backend
+* Supabase
+
+---
+
+# 📦 Installation
+
+## Clone Repository
+
+```bash
+git clone https://github.com/SanKrishnan/Savoury-Sweet.git
+cd Savoury-Sweet
+```
+
+## Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+## Create a `.env`
+
+```env
+SUPABASE_URL=YOUR_URL
+SUPABASE_KEY=YOUR_KEY
+
+AI_PROVIDER=groq
+
+GROQ_API_KEY=YOUR_KEY
+
+OLLAMA_MODEL=llama3.2
+
+OPENAI_API_KEY=YOUR_KEY
+```
+
+---
+
+## Run
+
 ```bash
 python main.py
 ```
-The application will spin up locally on `http://localhost:8000`.
 
-### 2. Testing the Live Cloud Environment
-Open [savoury-sweet.onrender.com](https://savoury-sweet.onrender.com/) in your web browser:
-*   Use the **Microphone** button to talk to the AI Assistant.
-*   The system uses the client-side Web Speech fallback for voice recognition and replies through speech synthesis.
-*   Complete an order by adding items like "Chocolate Cake" or "Samosa", say "yes" to confirm, and provide your name to generate a cloud-stored invoice receipt.
+Open
 
-### 3. Twilio Telephony Setup
-1. Expose your port using ngrok:
-   ```bash
-   ngrok http 8000
-   ```
-2. Configure your Twilio number voice webhook to POST to:
-   `https://<your-ngrok-subdomain>.ngrok-free.app/voice`
+```
+http://localhost:8000
+```
 
 ---
 
-## 🤝 Contributing
-Contributions are highly welcome. Feel free to open issues or submit pull requests for optimizations to the prompt handler, speech latency, or UX additions.
+# 🧪 Try It
 
-1. Fork the Project.
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the Branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request.
+Ask the assistant things like
 
----
-
-## 📄 License
-This project is licensed under the MIT License.
+* Add two Chocolate Cakes
+* Remove the Samosa
+* Keep only one Vada Pav
+* How does the Butterscotch Cake taste?
+* What does the Alfredo Spaghetti look like?
+* Which dessert do you recommend?
+* Place my order
 
 ---
 
-## ✉️ Contact & Project Maintenance
-*   **Project Link**: [https://savoury-sweet.onrender.com/](https://savoury-sweet.onrender.com/)
-*   **Contact Email**: support@savourysweet.co
+# ☁️ Deployment
+
+Frontend
+
+* Vercel
+
+Backend
+
+* FastAPI on Render
+
+Database & Storage
+
+* Supabase
+
+---
+
+# 📷 Screenshots
+
+## 🏠 Homepage
+
+![Homepage](Screenshots/Homepage.png)
+
+---
+
+## 🤖 AI Conversation
+
+![AI Chat](Screenshots/Chat.png)
+
+---
+
+## 📱 Mobile Homepage
+
+![Mobile Homepage](Screenshots/Mobile_Homepage.jpeg)
+
+---
+
+## 💬 Mobile AI Chat
+
+![Mobile Chat](Screenshots/Mobile_Chatbot.jpeg)
+
+---
+
+## 📋 Orders Stored in Supabase Table
+
+![Supabase Table](Screenshots/Table.png)
+
+---
+
+## 🗂️ Invoice Stored in Supabase Storage
+
+![Supabase Storage](Screenshots/Bucket_storage.png)
+
+---
+
+## 🧾 Orders Database
+
+![Orders](Screenshots/List_orders.png)
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push your branch
+5. Open a Pull Request
+
+---
+
+# 📄 License
+
+Licensed under the MIT License.
