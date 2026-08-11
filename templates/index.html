@@ -212,98 +212,273 @@
     ═══════════════════════════════════════════════ -->
     <div id="left-panel" class="border-r border-gray-200 bg-white p-6 flex flex-col">
 
-        <!-- Header -->
-        <div class="mb-7 border-b border-gray-100 pb-5">
-            <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Savoury &amp; Sweet Co.</h1>
-            <p class="text-gray-500 mt-2 text-sm leading-relaxed">
-                Artisanal bakes, crafted fresh every morning. Browse below, add items to your basket,
-                and let our AI assistant help you build the perfect order.
-            </p>
+        <!-- Add Dashboard Button -->
+        <div class="mb-7 border-b border-gray-100 pb-5 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Savoury &amp; Sweet Co.</h1>
+                <p class="text-gray-500 mt-2 text-sm leading-relaxed">
+                    Artisanal bakes, crafted fresh every morning. Browse below, add items to your basket,
+                    and let our AI assistant help you build the perfect order.
+                </p>
+            </div>
+            <a href="/dashboard" class="text-sm font-medium text-emerald-600 bg-emerald-50 px-4 py-2 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap">
+                View Dashboard &rarr;
+            </a>
         </div>
 
         <!-- Menu Grid -->
         <h2 class="text-base font-semibold text-gray-700 mb-3 uppercase tracking-wide">Freshly Baked Menu</h2>
         <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-5 flex-1">
 
+            <!-- 1. Alfredo Spaghetti -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/chocolate_cake.png" alt="Chocolate Cake" class="w-full h-56 object-cover rounded-xl mb-2">
-                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Cake</h3>
-                <p class="text-emerald-600 font-bold mb-2 mt-1">₹500</p>
-                <button onclick="addToCart('Chocolate Cake', 500)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+                <img src="/static/products/alfredo-spaghetti.png" alt="Alfredo Spaghetti" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Alfredo Spaghetti</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹250</p>
+                <button onclick="addToCart('Alfredo Spaghetti', 250)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 2. Aloo Tikki -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/vanilla_cupcakes.png" alt="Vanilla Cupcakes" class="w-full h-56 object-cover rounded-xl mb-2">
-                <h3 class="font-semibold text-gray-800 text-sm">Vanilla Cupcakes (6)</h3>
-                <p class="text-emerald-600 font-bold mb-2 mt-1">₹300</p>
-                <button onclick="addToCart('Vanilla Cupcakes (6)', 300)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+                <img src="/static/products/aloo-tikki.jpg" alt="Aloo Tikki" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Aloo Tikki</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹40</p>
+                <button onclick="addToCart('Aloo Tikki', 40)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 3. Black Forest Cake -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/butter_croissant.png" alt="Butter Croissant" class="w-full h-56 object-cover rounded-xl mb-2">
+                <img src="/static/products/black-forest-cake.jpg" alt="Black Forest Cake" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Black Forest Cake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹550</p>
+                <button onclick="addToCart('Black Forest Cake', 550)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 4. Blueberry Muffin -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/blueberry-muffin.jpg" alt="Blueberry Muffin" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Blueberry Muffin</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹80</p>
+                <button onclick="addToCart('Blueberry Muffin', 80)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 5. Butter Croissant -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/butter-croissant.png" alt="Butter Croissant" class="w-full h-56 object-cover rounded-xl mb-2">
                 <h3 class="font-semibold text-gray-800 text-sm">Butter Croissant</h3>
                 <p class="text-emerald-600 font-bold mb-2 mt-1">₹150</p>
                 <button onclick="addToCart('Butter Croissant', 150)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 6. Butterscotch Cake -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/savoury_tart.png" alt="Savoury Tart" class="w-full h-56 object-cover rounded-xl mb-2">
-                <h3 class="font-semibold text-gray-800 text-sm">Savoury Tart</h3>
-                <p class="text-emerald-600 font-bold mb-2 mt-1">₹250</p>
-                <button onclick="addToCart('Savoury Tart', 250)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
-            </div>
-            
-            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/Chocolate Mousse.jpg" alt="Chocolate Mousse" class="w-full h-56 object-cover rounded-xl mb-2">
-                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Mousse</h3>
-                <p class="text-emerald-600 font-bold mb-2 mt-1">₹90</p>
-                <button onclick="addToCart('Chocolate Mousse', 90)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
-            </div>
-
-            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/Butterscotch Cake.jpg" alt="Butterscotch Cake" class="w-full h-56 object-cover rounded-xl mb-2">
+                <img src="/static/products/butterscotch-cake.jpg" alt="Butterscotch Cake" class="w-full h-56 object-cover rounded-xl mb-2">
                 <h3 class="font-semibold text-gray-800 text-sm">Butterscotch Cake</h3>
                 <p class="text-emerald-600 font-bold mb-2 mt-1">₹350</p>
-                <button onclick="addToCart('Butterscotch Cake',350)"
-                    class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">
-                    Add to Basket
-                </button>
+                <button onclick="addToCart('Butterscotch Cake', 350)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 7. Cheese Sandwich -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/samosa.png" alt="Samosa" class="w-full h-56 object-cover rounded-xl mb-2">
+                <img src="/static/products/cheese-sandwich.jpg" alt="Cheese Sandwich" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Cheese Sandwich</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹80</p>
+                <button onclick="addToCart('Cheese Sandwich', 80)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 8. Cheesy Garlic Bread -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/cheesy-garlic-bread.jpg" alt="Cheesy Garlic Bread" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Cheesy Garlic Bread</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹150</p>
+                <button onclick="addToCart('Cheesy Garlic Bread', 150)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 9. Choco Chip Cookies -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/choco-chip-cookies.jpg" alt="Choco Chip Cookies" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Choco Chip Cookies</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹60</p>
+                <button onclick="addToCart('Choco Chip Cookies', 60)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 10. Chocolate Brownie -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/chocolate-brownie.jpg" alt="Chocolate Brownie" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-amber-900 to-yellow-900 items-center justify-center text-5xl">🍫</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Brownie</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹90</p>
+                <button onclick="addToCart('Chocolate Brownie', 90)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 11. Chocolate Cake -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/chocolate-cake.png" alt="Chocolate Cake" class="w-full h-56 object-cover rounded-xl mb-2">
+                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Cake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹500</p>
+                <button onclick="addToCart('Chocolate Cake', 500)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 12. Chocolate Cupcake -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/chocolate-cupcake.jpg" alt="Chocolate Cupcake" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-purple-900 to-pink-800 items-center justify-center text-5xl">🧁</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Cupcake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹70</p>
+                <button onclick="addToCart('Chocolate Cupcake', 70)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 13. Chocolate Donut -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/chocolate-donut.jpg" alt="Chocolate Donut" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-amber-800 to-orange-700 items-center justify-center text-5xl">🍩</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Donut</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹60</p>
+                <button onclick="addToCart('Chocolate Donut', 60)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 14. Chocolate Shake -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/chocolate-shake.jpg" alt="Chocolate Shake" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-stone-800 to-amber-900 items-center justify-center text-5xl">🥤</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Chocolate Shake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹120</p>
+                <button onclick="addToCart('Chocolate Shake', 120)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 15. Cold Coffee -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/cold-coffee.jpg" alt="Cold Coffee" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-stone-700 to-amber-800 items-center justify-center text-5xl">☕</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Cold Coffee</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹100</p>
+                <button onclick="addToCart('Cold Coffee', 100)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 16. Cookies -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/cookies.jpg" alt="Cookies" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-yellow-800 to-amber-700 items-center justify-center text-5xl">🍪</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Cookies</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹50</p>
+                <button onclick="addToCart('Cookies', 50)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 17. Cupcake -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/cupcake.jpg" alt="Cupcake" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-pink-500 to-rose-600 items-center justify-center text-5xl">🧁</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Cupcake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹60</p>
+                <button onclick="addToCart('Cupcake', 60)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 18. Donut -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/donut.jpg" alt="Donut" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-pink-300 to-rose-400 items-center justify-center text-5xl">🍩</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Donut</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹50</p>
+                <button onclick="addToCart('Donut', 50)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 19. Kachori -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/kachori.jpg" alt="Kachori" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-amber-600 to-orange-700 items-center justify-center text-5xl">🥮</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Kachori</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹25</p>
+                <button onclick="addToCart('Kachori', 25)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 20. Mango Shake -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/mango-shake.jpg" alt="Mango Shake" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-yellow-500 to-orange-500 items-center justify-center text-5xl">🥭</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Mango Shake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹110</p>
+                <button onclick="addToCart('Mango Shake', 110)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 21. Masala Sandwich -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/masala-sandwich.jpg" alt="Masala Sandwich" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-green-700 to-emerald-600 items-center justify-center text-5xl">🥪</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Masala Sandwich</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹70</p>
+                <button onclick="addToCart('Masala Sandwich', 70)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 22. Muffin -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/muffin.jpg" alt="Muffin" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-amber-700 to-yellow-600 items-center justify-center text-5xl">🧁</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Muffin</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹70</p>
+                <button onclick="addToCart('Muffin', 70)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 23. Paneer Puff -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/paneer-puff.jpg" alt="Paneer Puff" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-yellow-600 to-amber-500 items-center justify-center text-5xl">🥐</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Paneer Puff</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹50</p>
+                <button onclick="addToCart('Paneer Puff', 50)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 24. Red Velvet Cake -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/red-velvet-cake.jpg" alt="Red Velvet Cake" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-red-800 to-rose-700 items-center justify-center text-5xl">🎂</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Red Velvet Cake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹600</p>
+                <button onclick="addToCart('Red Velvet Cake', 600)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
+
+            <!-- 25. Samosa -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/samosa.png" alt="Samosa" class="w-full h-56 object-cover rounded-xl mb-2">
                 <h3 class="font-semibold text-gray-800 text-sm">Samosa</h3>
                 <p class="text-emerald-600 font-bold mb-2 mt-1">₹20</p>
                 <button onclick="addToCart('Samosa', 20)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 26. Vada Pav -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-                <img src="/static/schezwan_vada_pav.png" alt="Vada Pav" class="w-full h-56 object-cover rounded-xl mb-2">
+                <img src="/static/products/vada-pav.jpg" alt="Vada Pav" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-amber-600 to-yellow-500 items-center justify-center text-5xl">🍔</div>
                 <h3 class="font-semibold text-gray-800 text-sm">Vada Pav</h3>
                 <p class="text-emerald-600 font-bold mb-2 mt-1">₹16</p>
                 <button onclick="addToCart('Vada Pav', 16)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 27. Vanilla Cake -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-            <img src="/static/Garlic bread.jpg"alt="Cheesy Garlic Bread" class="w-full h-56 object-cover rounded-xl mb-2">
-            <h3 class="font-semibold text-gray-800 text-sm">Cheesy Garlic Bread</h3>
-            <p class="text-emerald-600 font-bold mb-2 mt-1">₹150</p>
-            <button onclick="addToCart('Cheesy Garlic Bread',150)"
-                class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">
-                Add to Basket
-            </button>
+                <img src="/static/products/vanilla-cake.jpg" alt="Vanilla Cake" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-amber-100 to-yellow-200 items-center justify-center text-5xl">🎂</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Vanilla Cake</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹450</p>
+                <button onclick="addToCart('Vanilla Cake', 450)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 28. Veg Puff -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
-            <img src="/static/alfredopasta.png" alt="Alfredo Spaghetti" class="w-full h-56 object-cover rounded-xl mb-2">
-            <h3 class="font-semibold text-gray-800 text-sm">Alfredo Spaghetti </h3>
-            <p class="text-emerald-600 font-bold mb-2 mt-1">₹250</p>
-            <button onclick="addToCart('Alfredo Spaghetti',250)"
-                class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">
-                Add to Basket
-            </button>
+                <img src="/static/products/veg-puff.jpg" alt="Veg Puff" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-green-600 to-lime-500 items-center justify-center text-5xl">🥐</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Veg Puff</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹40</p>
+                <button onclick="addToCart('Veg Puff', 40)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
+            <!-- 29. Veg Sandwich -->
+            <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
+                <img src="/static/products/veg-sandwich.jpg" alt="Veg Sandwich" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="hidden w-full h-56 rounded-xl mb-2 bg-gradient-to-br from-green-500 to-emerald-500 items-center justify-center text-5xl">🥪</div>
+                <h3 class="font-semibold text-gray-800 text-sm">Veg Sandwich</h3>
+                <p class="text-emerald-600 font-bold mb-2 mt-1">₹60</p>
+                <button onclick="addToCart('Veg Sandwich', 60)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
+            </div>
 
         </div>
 
@@ -831,21 +1006,38 @@ function downloadChatHistory() {
     URL.revokeObjectURL(url);
 }
 async function placeOrder(customer){
-    const response = await fetch("/place_order",{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            customer,
-            items:cart
-        })
-    });
-    const data = await response.json();
-    alert("Order placed successfully!");
-    window.open(data.invoice_url, "_blank");
-    cart=[];
-    renderCart();
+    try {
+        const response = await fetch("/place_order",{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+                customer,
+                items:cart
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.status === "success") {
+            alert("Order placed successfully!");
+            if (data.invoice_url) {
+                window.open(data.invoice_url, "_blank");
+            }
+            cart=[];
+            renderCart();
+            // Refresh to update dashboard
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            alert("Failed to place order: " + (data.error || "Unknown error"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("An error occurred while placing the order.");
+    }
 }
 
 // ════════════════════════════════════════════════════════

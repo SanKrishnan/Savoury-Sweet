@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Savoury & Sweet Co. - Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-200">
+                    S&S
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900">Analytics Dashboard</h1>
+                    <p class="text-sm text-slate-500 font-medium">Savoury & Sweet Co.</p>
+                </div>
+            </div>
+            <a href="/" class="text-sm font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg transition-colors">
+                &larr; Back to Store
+            </a>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card rounded-2xl p-6 transition-transform hover:-translate-y-1 duration-300">
+                <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Total Revenue</h3>
+                <div class="text-3xl font-bold text-slate-800" id="totalRevenue">₹0</div>
+                <div class="mt-2 text-sm text-emerald-500 flex items-center font-medium">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    Lifetime earnings
+                </div>
+            </div>
+            
+            <div class="glass-card rounded-2xl p-6 transition-transform hover:-translate-y-1 duration-300">
+                <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Total Orders</h3>
+                <div class="text-3xl font-bold text-slate-800" id="totalOrders">0</div>
+                <div class="mt-2 text-sm text-blue-500 flex items-center font-medium">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                    Completed orders
+                </div>
+            </div>
+
+            <div class="glass-card rounded-2xl p-6 transition-transform hover:-translate-y-1 duration-300">
+                <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Avg. Order Value</h3>
+                <div class="text-3xl font-bold text-slate-800" id="avgOrderValue">₹0</div>
+                <div class="mt-2 text-sm text-purple-500 flex items-center font-medium">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    Per customer average
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Line Chart: Revenue Trend -->
+            <div class="glass-card rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-slate-800 mb-4">Revenue Trend</h2>
+                <div class="relative h-72 w-full">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Pie Chart: Top Products -->
+            <div class="glass-card rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-slate-800 mb-4">Product Sales Distribution</h2>
+                <div class="relative h-72 w-full flex justify-center">
+                    <canvas id="productsPieChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Polar Area Chart: Items Sold Trend (Creative) -->
+            <div class="glass-card rounded-2xl p-6 lg:col-span-2">
+                <h2 class="text-lg font-bold text-slate-800 mb-4">Volume of Items Sold by Date (Polar Area)</h2>
+                <div class="relative h-80 w-full flex justify-center">
+                    <canvas id="itemsPolarChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Chart Config Options
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = '#64748b';
+        
+        async function fetchAnalytics() {
+            try {
+                const response = await fetch('/api/analytics');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    updateDashboard(data);
+                } else {
+                    console.error("Failed to load analytics data", data.error);
+                }
+            } catch (err) {
+                console.error("Error fetching analytics:", err);
+            }
+        }
+
+        function updateDashboard(data) {
+            // Update Summary Cards
+            document.getElementById('totalRevenue').innerText = '₹' + data.summary.total_revenue.toLocaleString();
+            document.getElementById('totalOrders').innerText = data.summary.total_orders.toLocaleString();
+            document.getElementById('avgOrderValue').innerText = '₹' + data.summary.avg_order_value.toLocaleString(undefined, {maximumFractionDigits: 2});
+
+            // 1. Revenue Line Chart
+            const ctxRev = document.getElementById('revenueChart').getContext('2d');
+            
+            // Create gradient
+            let gradientRev = ctxRev.createLinearGradient(0, 0, 0, 400);
+            gradientRev.addColorStop(0, 'rgba(16, 185, 129, 0.5)'); // emerald-500
+            gradientRev.addColorStop(1, 'rgba(16, 185, 129, 0)');
+            
+            new Chart(ctxRev, {
+                type: 'line',
+                data: {
+                    labels: data.trends.labels,
+                    datasets: [{
+                        label: 'Daily Revenue (₹)',
+                        data: data.trends.revenue,
+                        borderColor: '#10b981',
+                        backgroundColor: gradientRev,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#10b981',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 13, weight: 'bold' },
+                            bodyFont: { size: 14 },
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: false,
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(241, 245, 249, 1)', drawBorder: false }
+                        },
+                        x: {
+                            grid: { display: false, drawBorder: false }
+                        }
+                    }
+                }
+            });
+
+            // 2. Top Products Pie Chart
+            const ctxPie = document.getElementById('productsPieChart').getContext('2d');
+            
+            // Generate nice colors
+            const colors = [
+                '#3b82f6', // blue
+                '#8b5cf6', // violet
+                '#ec4899', // pink
+                '#f43f5e', // rose
+                '#f59e0b', // amber
+                '#10b981', // emerald
+                '#06b6d4', // cyan
+                '#6366f1', // indigo
+                '#14b8a6', // teal
+                '#84cc16'  // lime
+            ];
+
+            new Chart(ctxPie, {
+                type: 'pie', // Changed to Pie chart as requested
+                data: {
+                    labels: data.top_products.labels.slice(0, 8), // Top 8
+                    datasets: [{
+                        data: data.top_products.data.slice(0, 8),
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            padding: 12,
+                            cornerRadius: 8
+                        }
+                    }
+                }
+            });
+
+            // 3. Polar Area Chart (Creative representation for volume)
+            const ctxPolar = document.getElementById('itemsPolarChart').getContext('2d');
+            
+            // We use the dates as labels, but only show up to last 10 dates for polar area to avoid crowding
+            const recentLabels = data.trends.labels.slice(-10);
+            const recentData = data.trends.items.slice(-10);
+            
+            // Add transparency to colors for polar chart
+            const transparentColors = colors.map(c => c + 'aa');
+
+            new Chart(ctxPolar, {
+                type: 'polarArea',
+                data: {
+                    labels: recentLabels,
+                    datasets: [{
+                        label: 'Items Sold',
+                        data: recentData,
+                        backgroundColor: transparentColors,
+                        borderWidth: 1,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            ticks: { backdropColor: 'transparent' },
+                            grid: { color: 'rgba(226, 232, 240, 0.5)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: { size: 12 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', fetchAnalytics);
+    </script>
+</body>
+</html>

@@ -58,16 +58,40 @@ Keep your responses short (under 2 sentences), friendly, and conversational beca
 Do not use emojis in your response.
 
 Menu:
-- Chocolate Cake: ₹500
-- Vanilla Cupcakes (half dozen): ₹300
-- Butter Croissant: ₹150
-- Savoury Tart: ₹250
+Savoury – Indian Snacks:
 - Samosa: ₹20
 - Vada Pav: ₹16
+- Aloo Tikki: ₹40
+- Kachori: ₹25
+- Veg Puff: ₹40
+- Paneer Puff: ₹50
+Savoury – Sandwiches & Mains:
+- Masala Sandwich: ₹70
+- Veg Sandwich: ₹60
+- Cheese Sandwich: ₹80
 - Cheesy Garlic Bread: ₹150
-- Butterscotch Cake: ₹350
 - Alfredo Spaghetti: ₹250
-- Chocolate Mousse: ₹90
+Sweet – Cakes:
+- Chocolate Cake: ₹500
+- Vanilla Cake: ₹450
+- Butterscotch Cake: ₹350
+- Black Forest Cake: ₹550
+- Red Velvet Cake: ₹600
+Sweet – Bakes & Snacks:
+- Butter Croissant: ₹150
+- Chocolate Brownie: ₹90
+- Cupcake: ₹60
+- Chocolate Cupcake: ₹70
+- Blueberry Muffin: ₹80
+- Muffin: ₹70
+- Choco Chip Cookies: ₹60
+- Cookies: ₹50
+- Donut: ₹50
+- Chocolate Donut: ₹60
+Beverages:
+- Cold Coffee: ₹100
+- Chocolate Shake: ₹120
+- Mango Shake: ₹110
 
 Store Hours:
 - Monday-Friday: 10 AM to 9 PM
@@ -116,16 +140,40 @@ class ChatRequest(BaseModel):
     cart: List[Dict[str, Any]] = []
 
 MENU = {
-    "Chocolate Cake": 500,
-    "Vanilla Cupcakes (6)": 300,
-    "Butter Croissant": 150,
-    "Savoury Tart": 250,
+    # Savoury – Indian Snacks
     "Samosa": 20,
     "Vada Pav": 16,
+    "Aloo Tikki": 40,
+    "Kachori": 25,
+    "Veg Puff": 40,
+    "Paneer Puff": 50,
+    # Savoury – Sandwiches
+    "Masala Sandwich": 70,
+    "Veg Sandwich": 60,
+    "Cheese Sandwich": 80,
     "Cheesy Garlic Bread": 150,
-    "Butterscotch Cake": 350,
     "Alfredo Spaghetti": 250,
-    "Chocolate Mousse": 90
+    # Sweet – Cakes
+    "Chocolate Cake": 500,
+    "Vanilla Cake": 450,
+    "Butterscotch Cake": 350,
+    "Black Forest Cake": 550,
+    "Red Velvet Cake": 600,
+    # Sweet – Bite-Sized Bakes
+    "Butter Croissant": 150,
+    "Chocolate Brownie": 90,
+    "Cupcake": 60,
+    "Chocolate Cupcake": 70,
+    "Blueberry Muffin": 80,
+    "Muffin": 70,
+    "Choco Chip Cookies": 60,
+    "Cookies": 50,
+    "Donut": 50,
+    "Chocolate Donut": 60,
+    # Beverages
+    "Cold Coffee": 100,
+    "Chocolate Shake": 120,
+    "Mango Shake": 110,
 }
 NUMBER_WORDS = {
     "one":1,
@@ -479,11 +527,10 @@ async def place_order(order: OrderRequest):
         }
 
     except Exception as e:
-
             print("="*60)
             traceback.print_exc()
             print("="*60)
-
+            return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
 
 # ════════════════════════════════════════════════════════════════════
 #  WHISPER TRANSCRIPTION (server-side, high-accuracy mode)
@@ -520,6 +567,125 @@ async def transcribe_audio(file: UploadFile = File(...)):
         print(f"Whisper error: {e}")
         # Return an 'error' key (not a 500) so the browser JS silently falls back to Web Speech API
         return JSONResponse(content={"error": "Whisper unavailable", "detail": str(e)}, status_code=200)
+
+# ════════════════════════════════════════════════════════════════════
+#  ANALYTICS DASHBOARD ENDPOINTS
+# ════════════════════════════════════════════════════════════════════
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={}
+    )
+
+@app.get("/api/analytics")
+async def get_analytics():
+    """Return analytics data in a robust, production‑friendly format.
+    The response includes both a flat summary (total_revenue, total_orders, average_order_value)
+    and the detailed collections required by the frontend.
+    Any missing or malformed fields are handled gracefully.
+    """
+    try:
+        # Fetch all orders from Supabase
+        response = supabase.table("orders").select("*").execute()
+        orders = response.data or []
+
+        # Initialise aggregates
+        total_revenue = 0.0
+        total_orders = len(orders)
+        product_sales: dict[str, dict[str, float]] = {}
+        revenue_by_date: dict[str, float] = {}
+        items_by_date: dict[str, int] = {}
+
+        for order in orders:
+            # ---- Revenue & Order totals ----
+            order_total = float(order.get("total", 0) or 0)
+            total_revenue += order_total
+
+            # ---- Date handling (fallback to now) ----
+            created_at = order.get("created_at")
+            if not created_at:
+                created_at = datetime.now().isoformat()
+            # Ensure we only keep the YYYY‑MM‑DD part
+            date_str = str(created_at)[:10]
+
+            # Aggregate revenue and item count per date
+            revenue_by_date[date_str] = revenue_by_date.get(date_str, 0.0) + order_total
+            items_by_date[date_str] = items_by_date.get(date_str, 0) + sum(
+                int(item.get("quantity", 1) or 1) for item in (order.get("items") or [])
+            )
+
+            # ---- Product level aggregation ----
+            for item in order.get("items") or []:
+                name = item.get("name") or "Unknown"
+                qty = int(item.get("quantity", 1) or 1)
+                price = float(item.get("price", 0) or 0)
+                revenue = price * qty
+                if name not in product_sales:
+                    product_sales[name] = {"quantity": 0, "revenue": 0.0}
+                product_sales[name]["quantity"] += qty
+                product_sales[name]["revenue"] += revenue
+
+        # ---- Prepare sorted collections ----
+        # Revenue / items by date – sorted chronologically
+        sorted_dates = sorted(revenue_by_date.keys())
+        revenue_by_date_list = [
+            {"date": d, "revenue": round(revenue_by_date[d], 2)} for d in sorted_dates
+        ]
+        items_by_date_list = [
+            {"date": d, "quantity": items_by_date.get(d, 0)} for d in sorted_dates
+        ]
+
+        # Top products – sorted by quantity (you could also sort by revenue)
+        sorted_products = sorted(
+            product_sales.items(),
+            key=lambda kv: kv[1]["quantity"],
+            reverse=True,
+        )
+        top_products_list = [
+            {
+                "product": name,
+                "quantity": info["quantity"],
+                "revenue": round(info["revenue"], 2),
+            }
+            for name, info in sorted_products
+        ]
+        # Prepare arrays for frontend chart consumption
+        trend_labels = [item['date'] for item in revenue_by_date_list]
+        trend_revenue = [item['revenue'] for item in revenue_by_date_list]
+        trend_items = [item['quantity'] for item in items_by_date_list]
+        top_labels = [p['product'] for p in top_products_list]
+        top_data = [p['quantity'] for p in top_products_list]
+
+        # ---- Summary calculations ----
+        average_order_value = (
+            total_revenue / total_orders if total_orders > 0 else 0.0
+        )
+
+        # ---- Build response -----
+        return {
+            "status": "success",
+            "summary": {
+                "total_revenue": total_revenue,
+                "total_orders": total_orders,
+                "avg_order_value": total_revenue / total_orders if total_orders > 0 else 0
+            },
+            "trends": {
+                "labels": trend_labels,
+                "revenue": trend_revenue,
+                "items": trend_items
+            },
+            "top_products": {
+                "labels": top_labels,
+                "data": top_data
+            }
+        }
+    except Exception as e:
+        print("Analytics error:")
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ════════════════════════════════════════════════════════════════════
 #  SERVER ENTRY POINT
