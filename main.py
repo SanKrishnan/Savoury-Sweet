@@ -583,94 +583,102 @@ async def serve_dashboard(request: Request):
 @app.get("/api/analytics")
 async def get_analytics():
     """Return analytics data in a robust, production‑friendly format.
-    The response includes both a flat summary (total_revenue, total_orders, average_order_value)
-    and the detailed collections required by the frontend.
-    Any missing or malformed fields are handled gracefully.
+    Includes summary metrics, aggregated trends, top product lists, and raw sanitized orders.
+    Cleanly handles missing created_at fields via invoice URL parsing fallback.
     """
     try:
         # Fetch all orders from Supabase
         response = supabase.table("orders").select("*").execute()
-        orders = response.data or []
+        raw_orders = response.data or []
 
-        # Initialise aggregates
-        total_revenue = 0.0
-        total_orders = len(orders)
-        product_sales: dict[str, dict[str, float]] = {}
-        revenue_by_date: dict[str, float] = {}
-        items_by_date: dict[str, int] = {}
+        sanitized_orders = []
 
-        for order in orders:
-            # ---- Revenue & Order totals ----
-            order_total = float(order.get("total", 0) or 0)
-            total_revenue += order_total
+        for order in raw_orders:
+            # Skip invalid or test orders/customers
+            cust_name = str(order.get("customer") or "").strip()
+            if not cust_name or cust_name.lower() in ["test user", "test"]:
+                continue
 
-            # ---- Date handling (fallback to now) ----
+            # Extract date (prefer created_at, fallback to invoice_url regex, then current date)
             created_at = order.get("created_at")
-            if not created_at:
-                created_at = datetime.now().isoformat()
-            # Ensure we only keep the YYYY‑MM‑DD part
-            date_str = str(created_at)[:10]
+            date_str = None
+            if created_at:
+                date_str = str(created_at)[:10]
+            else:
+                inv_url = str(order.get("invoice_url") or "")
+                match = re.search(r'(\d{4})(\d{2})(\d{2})_\d{6}', inv_url)
+                if match:
+                    date_str = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+                else:
+                    date_str = datetime.now().strftime("%Y-%m-%d")
 
-            # Aggregate revenue and item count per date
-            revenue_by_date[date_str] = revenue_by_date.get(date_str, 0.0) + order_total
-            items_by_date[date_str] = items_by_date.get(date_str, 0) + sum(
-                int(item.get("quantity", 1) or 1) for item in (order.get("items") or [])
-            )
+            # Clean order total
+            order_total = float(order.get("total", 0) or 0)
 
-            # ---- Product level aggregation ----
+            # Clean items array
+            cleaned_items = []
             for item in order.get("items") or []:
-                name = item.get("name") or "Unknown"
-                qty = int(item.get("quantity", 1) or 1)
-                price = float(item.get("price", 0) or 0)
-                revenue = price * qty
-                if name not in product_sales:
-                    product_sales[name] = {"quantity": 0, "revenue": 0.0}
-                product_sales[name]["quantity"] += qty
-                product_sales[name]["revenue"] += revenue
+                p_name = str(item.get("name") or "Unknown").strip()
+                if p_name.lower() == "test":
+                    continue
+                p_qty = int(item.get("quantity", 1) or 1)
+                p_price = float(item.get("price", 0) or 0)
+                cleaned_items.append({
+                    "name": p_name,
+                    "quantity": p_qty,
+                    "price": p_price,
+                    "revenue": p_qty * p_price
+                })
 
-        # ---- Prepare sorted collections ----
-        # Revenue / items by date – sorted chronologically
+            sanitized_orders.append({
+                "id": order.get("id"),
+                "customer": cust_name,
+                "date": date_str,
+                "total": order_total,
+                "items": cleaned_items
+            })
+
+        # Calculate backward-compatible aggregates
+        total_revenue = sum(o["total"] for o in sanitized_orders)
+        total_orders = len(sanitized_orders)
+        total_units = sum(sum(i["quantity"] for i in o["items"]) for o in sanitized_orders)
+        avg_order_val = total_revenue / total_orders if total_orders > 0 else 0.0
+
+        revenue_by_date = {}
+        items_by_date = {}
+        product_sales = {}
+
+        for o in sanitized_orders:
+            d = o["date"]
+            revenue_by_date[d] = revenue_by_date.get(d, 0.0) + o["total"]
+            
+            for item in o["items"]:
+                pname = item["name"]
+                qty = item["quantity"]
+                rev = item["revenue"]
+                items_by_date[d] = items_by_date.get(d, 0) + qty
+
+                if pname not in product_sales:
+                    product_sales[pname] = {"quantity": 0, "revenue": 0.0}
+                product_sales[pname]["quantity"] += qty
+                product_sales[pname]["revenue"] += rev
+
         sorted_dates = sorted(revenue_by_date.keys())
-        revenue_by_date_list = [
-            {"date": d, "revenue": round(revenue_by_date[d], 2)} for d in sorted_dates
-        ]
-        items_by_date_list = [
-            {"date": d, "quantity": items_by_date.get(d, 0)} for d in sorted_dates
-        ]
+        trend_labels = sorted_dates
+        trend_revenue = [round(revenue_by_date[d], 2) for d in sorted_dates]
+        trend_items = [items_by_date.get(d, 0) for d in sorted_dates]
 
-        # Top products – sorted by quantity (you could also sort by revenue)
-        sorted_products = sorted(
-            product_sales.items(),
-            key=lambda kv: kv[1]["quantity"],
-            reverse=True,
-        )
-        top_products_list = [
-            {
-                "product": name,
-                "quantity": info["quantity"],
-                "revenue": round(info["revenue"], 2),
-            }
-            for name, info in sorted_products
-        ]
-        # Prepare arrays for frontend chart consumption
-        trend_labels = [item['date'] for item in revenue_by_date_list]
-        trend_revenue = [item['revenue'] for item in revenue_by_date_list]
-        trend_items = [item['quantity'] for item in items_by_date_list]
-        top_labels = [p['product'] for p in top_products_list]
-        top_data = [p['quantity'] for p in top_products_list]
+        sorted_products = sorted(product_sales.items(), key=lambda kv: kv[1]["quantity"], reverse=True)
+        top_labels = [k for k, v in sorted_products]
+        top_data = [v["quantity"] for k, v in sorted_products]
 
-        # ---- Summary calculations ----
-        average_order_value = (
-            total_revenue / total_orders if total_orders > 0 else 0.0
-        )
-
-        # ---- Build response -----
         return {
             "status": "success",
             "summary": {
-                "total_revenue": total_revenue,
+                "total_revenue": round(total_revenue, 2),
                 "total_orders": total_orders,
-                "avg_order_value": total_revenue / total_orders if total_orders > 0 else 0
+                "total_units": total_units,
+                "avg_order_value": round(avg_order_val, 2)
             },
             "trends": {
                 "labels": trend_labels,
@@ -680,12 +688,13 @@ async def get_analytics():
             "top_products": {
                 "labels": top_labels,
                 "data": top_data
-            }
+            },
+            "orders": sanitized_orders
         }
     except Exception as e:
         print("Analytics error:")
         traceback.print_exc()
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
 
 # ════════════════════════════════════════════════════════════════════
 #  SERVER ENTRY POINT

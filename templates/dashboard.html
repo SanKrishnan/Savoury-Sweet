@@ -3,155 +3,537 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Savoury & Sweet Co. - Analytics Dashboard</title>
+    <title>Savoury & Sweet Co. - Executive Analytics Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
+            color: #0f172a;
         }
         .glass-card {
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+        }
+        .glass-card:hover {
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
     </style>
 </head>
-<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+<body class="text-slate-800 antialiased min-h-screen flex flex-col bg-slate-50">
 
     <!-- Header -->
-    <header class="bg-white shadow-sm sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+    <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-200">
+                <div class="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-extrabold text-xl shadow-md shadow-emerald-200">
                     S&S
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold tracking-tight text-slate-900">Analytics Dashboard</h1>
-                    <p class="text-sm text-slate-500 font-medium">Savoury & Sweet Co.</p>
+                    <h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">Executive Analytics Dashboard</h1>
+                    <p class="text-xs text-slate-500 font-medium">Savoury & Sweet Co. • Business Intelligence</p>
                 </div>
             </div>
-            <a href="/" class="text-sm font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg transition-colors">
-                &larr; Back to Store
-            </a>
+            <div class="flex items-center gap-3">
+                <a href="/" class="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Back to Store
+                </a>
+            </div>
         </div>
     </header>
 
-    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
         
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="glass-card rounded-2xl p-6 transition-transform hover:-translate-y-1 duration-300">
-                <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Total Revenue</h3>
-                <div class="text-3xl font-bold text-slate-800" id="totalRevenue">₹0</div>
-                <div class="mt-2 text-sm text-emerald-500 flex items-center font-medium">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                    Lifetime earnings
-                </div>
-            </div>
-            
-            <div class="glass-card rounded-2xl p-6 transition-transform hover:-translate-y-1 duration-300">
-                <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Total Orders</h3>
-                <div class="text-3xl font-bold text-slate-800" id="totalOrders">0</div>
-                <div class="mt-2 text-sm text-blue-500 flex items-center font-medium">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-                    Completed orders
+        <!-- Filter Bar -->
+        <div class="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2 text-slate-700 font-medium text-sm w-full md:w-auto">
+                <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                <span>Filter Horizon:</span>
+                <div class="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold text-slate-600 space-x-1" id="timeFilterButtons">
+                    <button onclick="setRange('all')" id="btn-all" class="px-3 py-1.5 rounded-lg transition-all bg-white text-slate-900 shadow-sm">All Time</button>
+                    <button onclick="setRange('today')" id="btn-today" class="px-3 py-1.5 rounded-lg transition-all hover:text-slate-900">Today</button>
+                    <button onclick="setRange('week')" id="btn-week" class="px-3 py-1.5 rounded-lg transition-all hover:text-slate-900">This Week</button>
+                    <button onclick="setRange('month')" id="btn-month" class="px-3 py-1.5 rounded-lg transition-all hover:text-slate-900">This Month</button>
+                    <button onclick="setRange('quarter')" id="btn-quarter" class="px-3 py-1.5 rounded-lg transition-all hover:text-slate-900">This Quarter</button>
+                    <button onclick="setRange('year')" id="btn-year" class="px-3 py-1.5 rounded-lg transition-all hover:text-slate-900">This Year</button>
                 </div>
             </div>
 
-            <div class="glass-card rounded-2xl p-6 transition-transform hover:-translate-y-1 duration-300">
-                <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Avg. Order Value</h3>
-                <div class="text-3xl font-bold text-slate-800" id="avgOrderValue">₹0</div>
-                <div class="mt-2 text-sm text-purple-500 flex items-center font-medium">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                    Per customer average
+            <!-- Product / Reset Filter -->
+            <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+                <select id="productFilter" onchange="applyFilters()" class="bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm cursor-pointer">
+                    <option value="ALL">All Products</option>
+                </select>
+                
+                <button onclick="resetFilters()" class="text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-all flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- 4 KPI Cards Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <!-- Total Revenue -->
+            <div class="glass-card rounded-2xl p-5 transition-transform duration-200">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Total Revenue</span>
+                    <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                </div>
+                <div class="text-2xl font-extrabold text-slate-900 tracking-tight" id="kpiRevenue">₹0</div>
+                <div class="mt-2 text-xs text-slate-500 font-medium flex items-center gap-1">
+                    <span class="text-emerald-600 font-semibold" id="subRevenue">Validated sales</span>
+                </div>
+            </div>
+
+            <!-- Total Orders -->
+            <div class="glass-card rounded-2xl p-5 transition-transform duration-200">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Total Orders</span>
+                    <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                    </div>
+                </div>
+                <div class="text-2xl font-extrabold text-slate-900 tracking-tight" id="kpiOrders">0</div>
+                <div class="mt-2 text-xs text-slate-500 font-medium flex items-center gap-1">
+                    <span class="text-blue-600 font-semibold" id="subOrders">Processed orders</span>
+                </div>
+            </div>
+
+            <!-- Total Units Sold -->
+            <div class="glass-card rounded-2xl p-5 transition-transform duration-200">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Total Units Sold</span>
+                    <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    </div>
+                </div>
+                <div class="text-2xl font-extrabold text-slate-900 tracking-tight" id="kpiUnits">0</div>
+                <div class="mt-2 text-xs text-slate-500 font-medium flex items-center gap-1">
+                    <span class="text-amber-600 font-semibold" id="subUnits">Items dispatched</span>
+                </div>
+            </div>
+
+            <!-- Average Order Value -->
+            <div class="glass-card rounded-2xl p-5 transition-transform duration-200">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Avg. Order Value</span>
+                    <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                </div>
+                <div class="text-2xl font-extrabold text-slate-900 tracking-tight" id="kpiAOV">₹0</div>
+                <div class="mt-2 text-xs text-slate-500 font-medium flex items-center gap-1">
+                    <span class="text-purple-600 font-semibold" id="subAOV">Revenue / Order</span>
                 </div>
             </div>
         </div>
 
-        <!-- Charts Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <!-- Line Chart: Revenue Trend -->
-            <div class="glass-card rounded-2xl p-6">
-                <h2 class="text-lg font-bold text-slate-800 mb-4">Revenue Trend</h2>
+        <!-- Row 1 Charts: Revenue Trend (2/3) + Product Sales Mix (1/3) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="glass-card rounded-2xl p-5 lg:col-span-2 flex flex-col justify-between">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Revenue Trend</h2>
+                        <p class="text-xs text-slate-500 font-medium">Chronological revenue progression over time</p>
+                    </div>
+                    <span class="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100" id="trendGranularityBadge">Monthly Trend</span>
+                </div>
+                <div class="relative h-72 w-full">
+                    <canvas id="revenueTrendChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Product Sales Mix</h2>
+                    <p class="text-xs text-slate-500 font-medium mb-3">Revenue share by top products vs. others</p>
+                </div>
+                <div class="relative h-64 w-full flex justify-center items-center">
+                    <canvas id="salesMixChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2 Charts: Top Products by Units (1/2) + Top Products by Revenue (1/2) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="glass-card rounded-2xl p-5">
+                <div class="mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Top Products by Units Sold</h2>
+                    <p class="text-xs text-slate-500 font-medium">Highest volume demand items</p>
+                </div>
+                <div class="relative h-72 w-full">
+                    <canvas id="unitsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-2xl p-5">
+                <div class="mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Top Products by Revenue</h2>
+                    <p class="text-xs text-slate-500 font-medium">Top financial contributors (₹)</p>
+                </div>
                 <div class="relative h-72 w-full">
                     <canvas id="revenueChart"></canvas>
                 </div>
             </div>
+        </div>
 
-            <!-- Pie Chart: Top Products -->
-            <div class="glass-card rounded-2xl p-6">
-                <h2 class="text-lg font-bold text-slate-800 mb-4">Product Sales Distribution</h2>
-                <div class="relative h-72 w-full flex justify-center">
-                    <canvas id="productsPieChart"></canvas>
+        <!-- Row 3 Chart: Scatter Matrix (Volume vs Revenue) -->
+        <div class="glass-card rounded-2xl p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Product Performance: Volume vs Revenue</h2>
+                    <p class="text-xs text-slate-500 font-medium">Quadrant positioning analysis for product strategy</p>
+                </div>
+                <div class="flex flex-wrap gap-2 text-[11px] font-semibold">
+                    <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">★ Star Products (High Vol, High Rev)</span>
+                    <span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800">💎 Premium (Low Vol, High Rev)</span>
+                    <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800">⚡ High Demand (High Vol, Low Rev)</span>
+                    <span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700">🔍 Review Needed (Low Vol, Low Rev)</span>
                 </div>
             </div>
-            
-            <!-- Polar Area Chart: Items Sold Trend (Creative) -->
-            <div class="glass-card rounded-2xl p-6 lg:col-span-2">
-                <h2 class="text-lg font-bold text-slate-800 mb-4">Volume of Items Sold by Date (Polar Area)</h2>
-                <div class="relative h-80 w-full flex justify-center">
-                    <canvas id="itemsPolarChart"></canvas>
+            <div class="relative h-80 w-full">
+                <canvas id="scatterChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Row 4: Business Insights & Products Requiring Attention -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Business Insights -->
+            <div class="glass-card rounded-2xl p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                        💡
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Executive Business Insights</h2>
+                        <p class="text-xs text-slate-500 font-medium">Automated management takeaways from current filter</p>
+                    </div>
+                </div>
+                <div class="space-y-3" id="insightsContainer">
+                    <!-- Dynamic Insight Cards -->
+                </div>
+            </div>
+
+            <!-- Products Requiring Attention -->
+            <div class="glass-card rounded-2xl p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                        ⚠️
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Products Requiring Attention</h2>
+                        <p class="text-xs text-slate-500 font-medium">Products in bottom 20% by sales or margin contribution</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
+                                <th class="pb-2">Product</th>
+                                <th class="pb-2 text-right">Units</th>
+                                <th class="pb-2 text-right">Revenue</th>
+                                <th class="pb-2 pl-4">Reason for Review</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attentionTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                            <!-- Dynamic Table Rows -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
 
     </main>
 
+    <footer class="bg-white border-t border-slate-200 py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400 font-medium">
+            Savoury & Sweet Co. Business Intelligence • Live Supabase Sync
+        </div>
+    </footer>
+
     <script>
-        // Chart Config Options
+        // Global State & Chart Objects
+        let ALL_ORDERS = [];
+        let FILTERED_ORDERS = [];
+        let CURRENT_RANGE = 'all';
+        let SELECTED_PRODUCT = 'ALL';
+
+        let chartTrend = null;
+        let chartMix = null;
+        let chartUnits = null;
+        let chartRevenue = null;
+        let chartScatter = null;
+
+        // Chart defaults
         Chart.defaults.font.family = "'Inter', sans-serif";
         Chart.defaults.color = '#64748b';
-        
-        async function fetchAnalytics() {
+
+        // Color palette
+        const BRAND_COLORS = [
+            '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899',
+            '#06b6d4', '#6366f1', '#14b8a6', '#f43f5e', '#84cc16'
+        ];
+
+        // Currency Formatter (INR formatted cleanly)
+        function formatINR(val) {
+            val = floatVal(val);
+            if (val >= 10000000) return '₹' + (val / 10000000).toFixed(2) + 'Cr';
+            if (val >= 100000) return '₹' + (val / 100000).toFixed(2) + 'L';
+            if (val >= 1000) return '₹' + (val / 1000).toFixed(1) + 'K';
+            return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+        }
+
+        function formatExactINR(val) {
+            return '₹' + floatVal(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function floatVal(v) {
+            let n = parseFloat(v);
+            return isNaN(n) ? 0 : n;
+        }
+
+        // Initialize Fetch
+        async function fetchAnalyticsData() {
             try {
-                const response = await fetch('/api/analytics');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    updateDashboard(data);
+                const res = await fetch('/api/analytics');
+                const data = await res.json();
+
+                if (data.status === 'success' && data.orders) {
+                    ALL_ORDERS = data.orders;
+                    populateProductDropdown();
+                    applyFilters();
                 } else {
-                    console.error("Failed to load analytics data", data.error);
+                    console.error("API Error:", data.error);
                 }
             } catch (err) {
-                console.error("Error fetching analytics:", err);
+                console.error("Fetch Exception:", err);
             }
         }
 
-        function updateDashboard(data) {
-            // Update Summary Cards
-            document.getElementById('totalRevenue').innerText = '₹' + data.summary.total_revenue.toLocaleString();
-            document.getElementById('totalOrders').innerText = data.summary.total_orders.toLocaleString();
-            document.getElementById('avgOrderValue').innerText = '₹' + data.summary.avg_order_value.toLocaleString(undefined, {maximumFractionDigits: 2});
+        function populateProductDropdown() {
+            const dropdown = document.getElementById('productFilter');
+            const products = new Set();
+            ALL_ORDERS.forEach(o => {
+                (o.items || []).forEach(i => {
+                    if (i.name && i.name.toLowerCase() !== 'test') products.add(i.name);
+                });
+            });
 
-            // 1. Revenue Line Chart
-            const ctxRev = document.getElementById('revenueChart').getContext('2d');
+            const sortedProds = Array.from(products).sort();
+            dropdown.innerHTML = '<option value="ALL">All Products</option>';
+            sortedProds.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                dropdown.appendChild(opt);
+            });
+        }
+
+        function setRange(range) {
+            CURRENT_RANGE = range;
+            ['all', 'today', 'week', 'month', 'quarter', 'year'].forEach(r => {
+                const btn = document.getElementById('btn-' + r);
+                if (btn) {
+                    if (r === range) {
+                        btn.className = "px-3 py-1.5 rounded-lg transition-all bg-white text-slate-900 shadow-sm font-bold";
+                    } else {
+                        btn.className = "px-3 py-1.5 rounded-lg transition-all hover:text-slate-900 text-slate-600";
+                    }
+                }
+            });
+            applyFilters();
+        }
+
+        function resetFilters() {
+            SELECTED_PRODUCT = 'ALL';
+            document.getElementById('productFilter').value = 'ALL';
+            setRange('all');
+        }
+
+        function applyFilters() {
+            SELECTED_PRODUCT = document.getElementById('productFilter').value;
+
+            // Compute Reference Dates based on latest dataset date or today
+            let maxTime = 0;
+            ALL_ORDERS.forEach(o => {
+                if (o.date) {
+                    let t = new Date(o.date).getTime();
+                    if (t > maxTime) maxTime = t;
+                }
+            });
+
+            const refDate = maxTime > 0 ? new Date(maxTime) : new Date();
+            const refYear = refDate.getFullYear();
+            const refMonth = refDate.getMonth();
+
+            FILTERED_ORDERS = ALL_ORDERS.filter(o => {
+                if (!o.date) return false;
+                const d = new Date(o.date);
+
+                // Date Filtering
+                if (CURRENT_RANGE === 'today') {
+                    if (d.toISOString().slice(0, 10) !== refDate.toISOString().slice(0, 10)) return false;
+                } else if (CURRENT_RANGE === 'week') {
+                    const diffDays = (refDate - d) / (1000 * 3600 * 24);
+                    if (diffDays < 0 || diffDays > 7) return false;
+                } else if (CURRENT_RANGE === 'month') {
+                    if (d.getFullYear() !== refYear || d.getMonth() !== refMonth) return false;
+                } else if (CURRENT_RANGE === 'quarter') {
+                    const qRef = Math.floor(refMonth / 3);
+                    const qD = Math.floor(d.getMonth() / 3);
+                    if (d.getFullYear() !== refYear || qD !== qRef) return false;
+                } else if (CURRENT_RANGE === 'year') {
+                    if (d.getFullYear() !== refYear) return false;
+                }
+
+                // Product Filtering
+                if (SELECTED_PRODUCT !== 'ALL') {
+                    const hasProduct = (o.items || []).some(i => i.name === SELECTED_PRODUCT);
+                    if (!hasProduct) return false;
+                }
+
+                return true;
+            });
+
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            // Aggregate Data
+            let totalRevenue = 0;
+            let totalOrders = FILTERED_ORDERS.length;
+            let totalUnits = 0;
+
+            const productSales = {}; // name -> { quantity, revenue }
+            const dateAggregates = {}; // dateKey -> { revenue, items, count }
+
+            FILTERED_ORDERS.forEach(o => {
+                let orderRev = 0;
+                (o.items || []).forEach(i => {
+                    if (SELECTED_PRODUCT !== 'ALL' && i.name !== SELECTED_PRODUCT) return;
+                    let qty = floatVal(i.quantity);
+                    let rev = floatVal(i.revenue || (i.price * qty));
+                    orderRev += rev;
+                    totalUnits += qty;
+
+                    if (!productSales[i.name]) {
+                        productSales[i.name] = { quantity: 0, revenue: 0 };
+                    }
+                    productSales[i.name].quantity += qty;
+                    productSales[i.name].revenue += rev;
+                });
+
+                totalRevenue += (SELECTED_PRODUCT !== 'ALL' ? orderRev : floatVal(o.total));
+
+                const dateKey = o.date;
+                if (!dateAggregates[dateKey]) {
+                    dateAggregates[dateKey] = { revenue: 0, items: 0, count: 0 };
+                }
+                dateAggregates[dateKey].revenue += (SELECTED_PRODUCT !== 'ALL' ? orderRev : floatVal(o.total));
+                dateAggregates[dateKey].count += 1;
+            });
+
+            const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
+
+            // 1. Render KPIs
+            document.getElementById('kpiRevenue').innerText = formatINR(totalRevenue);
+            document.getElementById('kpiOrders').innerText = totalOrders.toLocaleString();
+            document.getElementById('kpiUnits').innerText = totalUnits.toLocaleString();
+            document.getElementById('kpiAOV').innerText = formatExactINR(avgOrderValue);
+
+            document.getElementById('subRevenue').innerText = `Total: ${formatExactINR(totalRevenue)}`;
+            document.getElementById('subOrders').innerText = `${totalOrders} orders in range`;
+            document.getElementById('subUnits').innerText = `${totalUnits} items total`;
+
+            // 2. Render Charts
+            renderRevenueTrend(dateAggregates);
+            renderSalesMix(productSales, totalRevenue);
+            renderTopProductsByUnits(productSales);
+            renderTopProductsByRevenue(productSales);
+            renderScatterMatrix(productSales);
+
+            // 3. Business Insights & Attention Table
+            renderInsights(productSales, totalRevenue, totalOrders, totalUnits, avgOrderValue);
+            renderAttentionTable(productSales, totalRevenue);
+        }
+
+        // ── CHART 1: REVENUE TREND ─────────────────────────────────────────
+        function renderRevenueTrend(dateAggregates) {
+            const sortedDates = Object.keys(dateAggregates).sort();
             
-            // Create gradient
-            let gradientRev = ctxRev.createLinearGradient(0, 0, 0, 400);
-            gradientRev.addColorStop(0, 'rgba(16, 185, 129, 0.5)'); // emerald-500
-            gradientRev.addColorStop(1, 'rgba(16, 185, 129, 0)');
-            
-            new Chart(ctxRev, {
+            // Grouping logic for readability based on range
+            let labels = [];
+            let dataRev = [];
+
+            if (CURRENT_RANGE === 'all' || CURRENT_RANGE === 'year' || sortedDates.length > 45) {
+                // Group by Month (YYYY-MM)
+                const monthAgg = {};
+                sortedDates.forEach(d => {
+                    const mKey = d.substring(0, 7); // YYYY-MM
+                    monthAgg[mKey] = (monthAgg[mKey] || 0) + dateAggregates[d].revenue;
+                });
+                labels = Object.keys(monthAgg).sort().map(m => {
+                    const dateObj = new Date(m + '-01');
+                    return dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                });
+                dataRev = Object.keys(monthAgg).sort().map(m => monthAgg[m]);
+                document.getElementById('trendGranularityBadge').innerText = 'Monthly Aggregation';
+            } else {
+                labels = sortedDates.map(d => {
+                    const dateObj = new Date(d);
+                    return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                });
+                dataRev = sortedDates.map(d => dateAggregates[d].revenue);
+                document.getElementById('trendGranularityBadge').innerText = 'Daily Aggregation';
+            }
+
+            const ctx = document.getElementById('revenueTrendChart').getContext('2d');
+            let gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+            if (chartTrend) chartTrend.destroy();
+
+            chartTrend = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.trends.labels,
+                    labels: labels,
                     datasets: [{
-                        label: 'Daily Revenue (₹)',
-                        data: data.trends.revenue,
+                        label: 'Revenue (₹)',
+                        data: dataRev,
                         borderColor: '#10b981',
-                        backgroundColor: gradientRev,
+                        backgroundColor: gradient,
                         borderWidth: 3,
-                        pointBackgroundColor: '#fff',
+                        pointBackgroundColor: '#ffffff',
                         pointBorderColor: '#10b981',
                         pointBorderWidth: 2,
-                        pointRadius: 4,
+                        pointRadius: labels.length > 20 ? 2 : 4,
                         pointHoverRadius: 6,
                         fill: true,
-                        tension: 0.4
+                        tension: 0.3
                     }]
                 },
                 options: {
@@ -160,50 +542,50 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                            titleFont: { size: 13, weight: 'bold' },
-                            bodyFont: { size: 14 },
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
                             padding: 12,
                             cornerRadius: 8,
-                            displayColors: false,
+                            callbacks: {
+                                label: ctx => `Revenue: ${formatExactINR(ctx.raw)}`
+                            }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            grid: { color: 'rgba(241, 245, 249, 1)', drawBorder: false }
+                            grid: { color: '#f1f5f9' },
+                            ticks: { callback: v => formatINR(v) }
                         },
-                        x: {
-                            grid: { display: false, drawBorder: false }
-                        }
+                        x: { grid: { display: false } }
                     }
                 }
             });
+        }
 
-            // 2. Top Products Pie Chart
-            const ctxPie = document.getElementById('productsPieChart').getContext('2d');
-            
-            // Generate nice colors
-            const colors = [
-                '#3b82f6', // blue
-                '#8b5cf6', // violet
-                '#ec4899', // pink
-                '#f43f5e', // rose
-                '#f59e0b', // amber
-                '#10b981', // emerald
-                '#06b6d4', // cyan
-                '#6366f1', // indigo
-                '#14b8a6', // teal
-                '#84cc16'  // lime
-            ];
+        // ── CHART 2: PRODUCT SALES MIX (DOUGHNUT) ─────────────────────────
+        function renderSalesMix(productSales, totalRevenue) {
+            const sorted = Object.entries(productSales).sort((a, b) => b[1].revenue - a[1].revenue);
+            const top5 = sorted.slice(0, 5);
+            const otherRev = sorted.slice(5).reduce((acc, curr) => acc + curr[1].revenue, 0);
 
-            new Chart(ctxPie, {
-                type: 'pie', // Changed to Pie chart as requested
+            const labels = top5.map(x => x[0]);
+            const data = top5.map(x => x[1].revenue);
+
+            if (otherRev > 0) {
+                labels.push('Other Products');
+                data.push(otherRev);
+            }
+
+            const ctx = document.getElementById('salesMixChart').getContext('2d');
+            if (chartMix) chartMix.destroy();
+
+            chartMix = new Chart(ctx, {
+                type: 'doughnut',
                 data: {
-                    labels: data.top_products.labels.slice(0, 8), // Top 8
+                    labels: labels,
                     datasets: [{
-                        data: data.top_products.data.slice(0, 8),
-                        backgroundColor: colors,
+                        data: data,
+                        backgroundColor: BRAND_COLORS,
                         borderWidth: 2,
                         borderColor: '#ffffff',
                         hoverOffset: 6
@@ -214,69 +596,324 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'right',
-                            labels: {
-                                usePointStyle: true,
-                                padding: 20,
-                                font: { size: 12 }
-                            }
+                            position: 'bottom',
+                            labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } }
                         },
                         tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
                             padding: 12,
-                            cornerRadius: 8
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: ctx => {
+                                    const val = ctx.raw;
+                                    const pct = totalRevenue > 0 ? ((val / totalRevenue) * 100).toFixed(1) : 0;
+                                    return `${ctx.label}: ${formatExactINR(val)} (${pct}%)`;
+                                }
+                            }
                         }
-                    }
+                    },
+                    cutout: '65%'
                 }
             });
+        }
 
-            // 3. Polar Area Chart (Creative representation for volume)
-            const ctxPolar = document.getElementById('itemsPolarChart').getContext('2d');
-            
-            // We use the dates as labels, but only show up to last 10 dates for polar area to avoid crowding
-            const recentLabels = data.trends.labels.slice(-10);
-            const recentData = data.trends.items.slice(-10);
-            
-            // Add transparency to colors for polar chart
-            const transparentColors = colors.map(c => c + 'aa');
+        // ── CHART 3: TOP PRODUCTS BY UNITS (HORIZONTAL BAR) ───────────────
+        function renderTopProductsByUnits(productSales) {
+            const sorted = Object.entries(productSales).sort((a, b) => b[1].quantity - a[1].quantity).slice(0, 8);
+            const labels = sorted.map(x => x[0]);
+            const unitsData = sorted.map(x => x[1].quantity);
 
-            new Chart(ctxPolar, {
-                type: 'polarArea',
+            const ctx = document.getElementById('unitsChart').getContext('2d');
+            if (chartUnits) chartUnits.destroy();
+
+            chartUnits = new Chart(ctx, {
+                type: 'bar',
                 data: {
-                    labels: recentLabels,
+                    labels: labels,
                     datasets: [{
-                        label: 'Items Sold',
-                        data: recentData,
-                        backgroundColor: transparentColors,
-                        borderWidth: 1,
-                        borderColor: '#ffffff'
+                        label: 'Units Sold',
+                        data: unitsData,
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6,
+                        barThickness: 18
                     }]
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        r: {
-                            ticks: { backdropColor: 'transparent' },
-                            grid: { color: 'rgba(226, 232, 240, 0.5)' }
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                afterLabel: ctx => {
+                                    const pName = ctx.label;
+                                    const rev = productSales[pName] ? productSales[pName].revenue : 0;
+                                    return `Revenue: ${formatExactINR(rev)}`;
+                                }
+                            }
                         }
                     },
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                            labels: {
-                                usePointStyle: true,
-                                padding: 20,
-                                font: { size: 12 }
-                            }
+                    scales: {
+                        x: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                        y: { grid: { display: false } }
+                    },
+                    onClick: (e, activeElements) => {
+                        if (activeElements.length > 0) {
+                            const index = activeElements[0].index;
+                            const clickedProduct = labels[index];
+                            document.getElementById('productFilter').value = clickedProduct;
+                            applyFilters();
                         }
                     }
                 }
             });
         }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', fetchAnalytics);
+        // ── CHART 4: TOP PRODUCTS BY REVENUE (HORIZONTAL BAR) ─────────────
+        function renderTopProductsByRevenue(productSales) {
+            const sorted = Object.entries(productSales).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 8);
+            const labels = sorted.map(x => x[0]);
+            const revData = sorted.map(x => x[1].revenue);
+
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            if (chartRevenue) chartRevenue.destroy();
+
+            chartRevenue = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Revenue (₹)',
+                        data: revData,
+                        backgroundColor: '#10b981',
+                        borderRadius: 6,
+                        barThickness: 18
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: ctx => `Revenue: ${formatExactINR(ctx.raw)}`,
+                                afterLabel: ctx => {
+                                    const pName = ctx.label;
+                                    const qty = productSales[pName] ? productSales[pName].quantity : 0;
+                                    return `Units Sold: ${qty}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => formatINR(v) } },
+                        y: { grid: { display: false } }
+                    },
+                    onClick: (e, activeElements) => {
+                        if (activeElements.length > 0) {
+                            const index = activeElements[0].index;
+                            const clickedProduct = labels[index];
+                            document.getElementById('productFilter').value = clickedProduct;
+                            applyFilters();
+                        }
+                    }
+                }
+            });
+        }
+
+        // ── CHART 5: SCATTER MATRIX (VOLUME VS REVENUE) ───────────────────
+        function renderScatterMatrix(productSales) {
+            const items = Object.entries(productSales);
+            if (items.length === 0) return;
+
+            const scatterData = items.map(([name, info]) => ({
+                x: info.quantity,
+                y: info.revenue,
+                name: name,
+                asp: info.quantity > 0 ? (info.revenue / info.quantity) : 0
+            }));
+
+            const ctx = document.getElementById('scatterChart').getContext('2d');
+            if (chartScatter) chartScatter.destroy();
+
+            chartScatter = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Products',
+                        data: scatterData,
+                        backgroundColor: scatterData.map(pt => {
+                            if (pt.x >= 50 && pt.y >= 10000) return '#10b981'; // Star
+                            if (pt.x < 50 && pt.y >= 10000) return '#8b5cf6'; // Premium
+                            if (pt.x >= 50 && pt.y < 10000) return '#f59e0b'; // High Demand
+                            return '#64748b'; // Review
+                        }),
+                        pointRadius: 7,
+                        pointHoverRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: ctx => {
+                                    const raw = ctx.raw;
+                                    return [
+                                        `Product: ${raw.name}`,
+                                        `Units Sold: ${raw.x}`,
+                                        `Total Revenue: ${formatExactINR(raw.y)}`,
+                                        `Avg Price/Unit: ${formatExactINR(raw.asp)}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Units Sold (Volume)', font: { size: 12, weight: 'bold' } },
+                            grid: { color: '#f1f5f9' },
+                            beginAtZero: true
+                        },
+                        y: {
+                            title: { display: true, text: 'Product Revenue (₹)', font: { size: 12, weight: 'bold' } },
+                            grid: { color: '#f1f5f9' },
+                            ticks: { callback: v => formatINR(v) },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // ── BUSINESS INSIGHTS GENERATION ─────────────────────────────────
+        function renderInsights(productSales, totalRevenue, totalOrders, totalUnits, avgOrderValue) {
+            const container = document.getElementById('insightsContainer');
+            container.innerHTML = '';
+
+            const sortedByRev = Object.entries(productSales).sort((a, b) => b[1].revenue - a[1].revenue);
+            const sortedByQty = Object.entries(productSales).sort((a, b) => b[1].quantity - a[1].quantity);
+
+            if (sortedByRev.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-500 italic">No sales recorded for selected horizon.</p>';
+                return;
+            }
+
+            const topRevProduct = sortedByRev[0];
+            const topQtyProduct = sortedByQty[0];
+
+            // Calculate Top 5 Revenue %
+            const top5Rev = sortedByRev.slice(0, 5).reduce((acc, curr) => acc + curr[1].revenue, 0);
+            const top5Pct = totalRevenue > 0 ? ((top5Rev / totalRevenue) * 100).toFixed(1) : 0;
+
+            const insights = [
+                {
+                    title: 'Top Revenue Driver',
+                    desc: `<span class="font-bold text-slate-900">${topRevProduct[0]}</span> is our highest financial contributor, generating <span class="font-bold text-emerald-600">${formatExactINR(topRevProduct[1].revenue)}</span> across ${topRevProduct[1].quantity} units.`,
+                    tag: 'Financial Peak',
+                    color: 'border-l-4 border-emerald-500 bg-emerald-50/50'
+                },
+                {
+                    title: 'Volume Leader',
+                    desc: `<span class="font-bold text-slate-900">${topQtyProduct[0]}</span> leads in total customer demand with <span class="font-bold text-blue-600">${topQtyProduct[1].quantity} units</span> sold (${formatExactINR(topQtyProduct[1].revenue)} total revenue).`,
+                    tag: 'High Demand',
+                    color: 'border-l-4 border-blue-500 bg-blue-50/50'
+                },
+                {
+                    title: 'Revenue Concentration',
+                    desc: `The top 5 products generate <span class="font-bold text-purple-600">${top5Pct}%</span> of overall revenue (${formatINR(top5Rev)} of ${formatINR(totalRevenue)} total).`,
+                    tag: 'Portfolio Mix',
+                    color: 'border-l-4 border-purple-500 bg-purple-50/50'
+                },
+                {
+                    title: 'Average Basket Value',
+                    desc: `Customers spend an average of <span class="font-bold text-amber-600">${formatExactINR(avgOrderValue)}</span> per order across ${totalOrders} completed transactions.`,
+                    tag: 'Order Benchmark',
+                    color: 'border-l-4 border-amber-500 bg-amber-50/50'
+                }
+            ];
+
+            insights.forEach(item => {
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-xl ${item.color} text-xs leading-relaxed space-y-1`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-center font-bold text-slate-800">
+                        <span>${item.title}</span>
+                        <span class="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">${item.tag}</span>
+                    </div>
+                    <p class="text-slate-600">${item.desc}</p>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // ── PRODUCTS REQUIRING ATTENTION ──────────────────────────────────
+        function renderAttentionTable(productSales, totalRevenue) {
+            const body = document.getElementById('attentionTableBody');
+            body.innerHTML = '';
+
+            const items = Object.entries(productSales);
+            if (items.length === 0) {
+                body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-400">No data available</td></tr>';
+                return;
+            }
+
+            // Logic: Bottom 20% by Revenue OR High Volume + Low Revenue
+            const sortedByRev = [...items].sort((a, b) => a[1].revenue - b[1].revenue);
+            const cutoffCount = Math.max(3, Math.floor(items.length * 0.25));
+            const lowRevItems = new Set(sortedByRev.slice(0, cutoffCount).map(x => x[0]));
+
+            const flagged = [];
+
+            items.forEach(([name, info]) => {
+                const pct = totalRevenue > 0 ? (info.revenue / totalRevenue) * 100 : 0;
+                let reason = '';
+
+                if (lowRevItems.has(name) && info.quantity < 20) {
+                    reason = 'Low sales volume & low revenue contribution (<1%)';
+                } else if (info.quantity > 50 && pct < 2.0) {
+                    reason = 'High fulfillment volume but low revenue margin per unit';
+                } else if (pct < 1.0) {
+                    reason = 'Underperforming revenue contribution';
+                }
+
+                if (reason) {
+                    flagged.push({ name, quantity: info.quantity, revenue: info.revenue, reason });
+                }
+            });
+
+            // Sort flagged by revenue ascending
+            flagged.sort((a, b) => a.revenue - b.revenue);
+
+            flagged.slice(0, 5).forEach(f => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition-colors';
+                tr.innerHTML = `
+                    <td class="py-2.5 font-bold text-slate-900">${f.name}</td>
+                    <td class="py-2.5 text-right font-semibold">${f.quantity}</td>
+                    <td class="py-2.5 text-right font-bold text-emerald-700">${formatExactINR(f.revenue)}</td>
+                    <td class="py-2.5 pl-4"><span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-[11px] font-medium border border-amber-200">${f.reason}</span></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        // DOM Loaded
+        document.addEventListener('DOMContentLoaded', fetchAnalyticsData);
     </script>
 </body>
 </html>
