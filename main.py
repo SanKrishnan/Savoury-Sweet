@@ -168,7 +168,7 @@ MENU = {
     "Muffin": 70,
     "Choco Chip Cookies": 60,
     "Cookies": 50,
-
+    "Donut": 50,
     "Chocolate Donut": 60,
     # Beverages
     "Cold Coffee": 100,
