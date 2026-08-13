@@ -517,16 +517,56 @@ async def chat_endpoint(request: ChatRequest):
             for i in request.cart
         )
 
-    # 1. Check for confirmation flow first
-    if pending_confirmation.get(session_id):
-        if message_lower in ["yes", "place order", "confirm", "ok", "okay", "proceed"]:
-            pending_confirmation.pop(session_id)
-            waiting_for_name[session_id] = True
+    # 1. ALWAYS run the deterministic parser first.
+    #    Cart-modification intents (replace, add, set, remove, clear) must never
+    #    be blocked by the pending_confirmation gate — a user can change their
+    #    mind at any point during the order flow.
+    intent_actions = parse_cart_intent(message, request.cart)
+
+    if intent_actions:
+        action_obj = intent_actions[0]
+        acttype = action_obj["action"]
+
+        # Any real cart action clears the confirmation gate
+        pending_confirmation.pop(session_id, None)
+
+        if acttype == "clear_cart":
             return {
-                "response": "Great! Before I place your order, may I know your name?",
-                "actions": []
+                "response": "Your basket has been cleared. Would you like to start a new order?",
+                "actions": intent_actions
+            }
+        elif acttype == "remove_item":
+            item_name = action_obj["item"]
+            return {
+                "response": f"{item_name} has been removed from your basket. Would you like to add anything else or place your order?",
+                "actions": intent_actions
+            }
+        elif acttype == "replace_item":
+            old = action_obj["old_item"]
+            new = action_obj["new_item"]
+            qty = action_obj["quantity"]
+            pending_confirmation[session_id] = True
+            return {
+                "response": f"Done! Replaced {old} with {qty} {new} in your basket. Would you like to add anything else or place your order? Reply yes to confirm.",
+                "actions": intent_actions
+            }
+        elif acttype in ["set_quantity", "add_quantity", "reduce_quantity"]:
+            item_name = action_obj["item"]
+            pending_confirmation[session_id] = True
+
+            if acttype == "set_quantity":
+                resp_text = f"Set {item_name} quantity to {action_obj['quantity']} in your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
+            elif acttype == "add_quantity":
+                resp_text = f"Added {action_obj['quantity']} {item_name} to your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
+            else:  # reduce_quantity
+                resp_text = f"Reduced {item_name} by {action_obj['quantity']}. Would you like to modify anything else, or should I place your order? Reply yes to confirm."
+
+            return {
+                "response": resp_text,
+                "actions": intent_actions
             }
 
+    # 2. No cart-modify intent — now check the confirmation gate.
     if waiting_for_name.get(session_id):
         waiting_for_name.pop(session_id)
         cust_name = message.strip() or "Guest Customer"
@@ -541,37 +581,13 @@ async def chat_endpoint(request: ChatRequest):
             ]
         }
 
-    # 2. Check deterministic cart intent parsing
-    intent_actions = parse_cart_intent(message, request.cart)
-    if intent_actions:
-        action_obj = intent_actions[0]
-        acttype = action_obj["action"]
-
-        if acttype == "clear_cart":
+    if pending_confirmation.get(session_id):
+        if message_lower in ["yes", "place order", "confirm", "ok", "okay", "proceed"]:
+            pending_confirmation.pop(session_id)
+            waiting_for_name[session_id] = True
             return {
-                "response": "Your basket has been cleared. Would you like to start a new order?",
-                "actions": intent_actions
-            }
-        elif acttype == "remove_item":
-            item_name = action_obj["item"]
-            return {
-                "response": f"{item_name} has been removed from your basket. Would you like to add anything else or place your order?",
-                "actions": intent_actions
-            }
-        elif acttype in ["set_quantity", "add_quantity", "reduce_quantity"]:
-            item_name = action_obj["item"]
-            pending_confirmation[session_id] = True
-
-            if acttype == "set_quantity":
-                resp_text = f"Set {item_name} quantity to {action_obj['quantity']} in your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
-            elif acttype == "add_quantity":
-                resp_text = f"Added {action_obj['quantity']} {item_name} to your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
-            else: # reduce_quantity
-                resp_text = f"Reduced {item_name} by {action_obj['quantity']}. Would you like to modify anything else, or should I place your order? Reply yes to confirm."
-
-            return {
-                "response": resp_text,
-                "actions": intent_actions
+                "response": "Great! Before I place your order, may I know your name?",
+                "actions": []
             }
 
     # 3. Fallback to AI LLM response
