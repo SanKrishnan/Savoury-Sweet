@@ -176,26 +176,124 @@ MENU = {
     "Mango Shake": 110,
 }
 NUMBER_WORDS = {
-    "one":1,
-    "two":2,
-    "three":3,
-    "four":4,
-    "five":5,
-    "six":6,
-    "seven":7,
-    "eight":8,
-    "nine":9,
-    "ten":10
+    "one": 1, "a": 1, "an": 1, "single": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10
 }
 
+ALIASES = [
+    ("black forest cake", "Black Forest Cake"),
+    ("black forest", "Black Forest Cake"),
+    ("red velvet cake", "Red Velvet Cake"),
+    ("red velvet", "Red Velvet Cake"),
+    ("butterscotch cake", "Butterscotch Cake"),
+    ("butterscotch", "Butterscotch Cake"),
+    ("chocolate cake", "Chocolate Cake"),
+    ("vanilla cake", "Vanilla Cake"),
+    ("cheesy garlic bread", "Cheesy Garlic Bread"),
+    ("garlic bread", "Cheesy Garlic Bread"),
+    ("alfredo spaghetti", "Alfredo Spaghetti"),
+    ("alfredo", "Alfredo Spaghetti"),
+    ("spaghetti", "Alfredo Spaghetti"),
+    ("chocolate brownie", "Chocolate Brownie"),
+    ("brownie", "Chocolate Brownie"),
+    ("chocolate cupcake", "Chocolate Cupcake"),
+    ("chocolate donut", "Chocolate Donut"),
+    ("chocolate shake", "Chocolate Shake"),
+    ("choco chip cookies", "Choco Chip Cookies"),
+    ("choco chip cookie", "Choco Chip Cookies"),
+    ("choco chip", "Choco Chip Cookies"),
+    ("butter croissant", "Butter Croissant"),
+    ("croissant", "Butter Croissant"),
+    ("blueberry muffin", "Blueberry Muffin"),
+    ("masala sandwich", "Masala Sandwich"),
+    ("cheese sandwich", "Cheese Sandwich"),
+    ("veg sandwich", "Veg Sandwich"),
+    ("sandwich", "Veg Sandwich"),
+    ("vada pav", "Vada Pav"),
+    ("vada", "Vada Pav"),
+    ("aloo tikki", "Aloo Tikki"),
+    ("paneer puff", "Paneer Puff"),
+    ("veg puff", "Veg Puff"),
+    ("cold coffee", "Cold Coffee"),
+    ("mango shake", "Mango Shake"),
+    ("samosa", "Samosa"),
+    ("kachori", "Kachori"),
+    ("cupcake", "Cupcake"),
+    ("muffin", "Muffin"),
+    ("cookies", "Cookies"),
+    ("cookie", "Cookies"),
+    ("donut", "Donut"),
+]
+
 def find_menu_item(text):
-    text = text.lower()
-
+    t_lower = text.lower()
+    for alias, official in ALIASES:
+        if re.search(rf"\b{re.escape(alias)}\b", t_lower):
+            return official
     for item in MENU:
-        if item.lower() in text:
+        if item.lower() in t_lower:
             return item
-
     return None
+
+def extract_number(text):
+    text_lower = text.lower()
+    match = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|single)\b", text_lower)
+    if match:
+        val = match.group(1)
+        if val.isdigit():
+            return int(val)
+        return NUMBER_WORDS.get(val, 1)
+    return 1
+
+def parse_cart_intent(user_text, cart_list):
+    text = user_text.lower().strip()
+    explicit_item = find_menu_item(text)
+    target_item = explicit_item
+
+    # If no target item explicitly mentioned in text, fallback to last item in cart
+    if not target_item and cart_list:
+        target_item = cart_list[-1]["name"]
+
+    # 1. Clear cart
+    if any(k in text for k in ["clear cart", "empty cart", "clear basket", "empty basket", "remove everything"]):
+        return [{"action": "clear_cart"}]
+
+    # 2. Complete removal of named item
+    if (text.startswith("remove ") or text.startswith("delete ") or text.startswith("drop ")) and explicit_item:
+        return [{"action": "remove_item", "item": explicit_item}]
+
+    # 3. REDUCE / DECREASE
+    if any(k in text for k in ["remove one", "reduce", "decrease", "take away", "minus", "less"]):
+        qty = extract_number(text)
+        if target_item:
+            return [{"action": "reduce_quantity", "item": target_item, "quantity": qty}]
+
+    # 4. SET QUANTITY
+    if any(k in text for k in ["make", "change", "set", "keep", "only"]):
+        qty = extract_number(text)
+        if target_item:
+            return [{"action": "set_quantity", "item": target_item, "price": MENU[target_item], "quantity": qty}]
+
+    # 5. ADD QUANTITY
+    if any(k in text for k in ["more", "add", "another", "plus"]):
+        qty = extract_number(text)
+        if target_item:
+            return [{"action": "add_quantity", "item": target_item, "price": MENU[target_item], "quantity": qty}]
+
+    # 6. Default ADD if explicit item found
+    if target_item:
+        qty = extract_number(text)
+        return [{"action": "add_quantity", "item": target_item, "price": MENU[target_item], "quantity": qty}]
+
+    return []
 def get_ai_response(session_id: str, user_text: str, cart_data: str = "Empty") -> str:
     """Supports both Ollama and Groq."""
     if session_id not in sessions:
@@ -325,6 +423,9 @@ async def serve_ui(request: Request):
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     session_id = "web_user_123"
+    message = request.message.strip()
+    message_lower = message.lower()
+
     if not request.cart:
         cart_str = "Empty"
     else:
@@ -332,101 +433,74 @@ async def chat_endpoint(request: ChatRequest):
             f"{i['quantity']}x {i['name']}"
             for i in request.cart
         )
-    message = request.message.lower().strip()
 
-    # ---------------- CLEAR CART ----------------
-    if any(x in message for x in [
-        "clear cart",
-        "empty cart",
-        "remove everything",
-        "clear basket"
-    ]):
-        return {
-            "response":
-            "Your basket has been cleared. Would you like to start a new order?",
-            "actions":[
-                {
-                    "action":"clear_cart"
-                }
-            ]
-        }
-# ---------------- KEEP ONLY ----------------
-    if any(phrase in message for phrase in ["keep only", "only"]):
-        item = find_menu_item(message)
-        if item:
-            # Reset cart to only this item with quantity 1
-            new_cart = [{"name": item, "quantity": 1, "price": MENU[item]}]
-            total = MENU[item]
-            response_text = f"Added 1 {item} to your basket. Your current total is ₹{total}. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
-            return {
-                "response": response_text,
-                "actions": [
-                    {
-                        "action": "keep_only",
-                        "item": item,
-                        "new_cart": new_cart,
-                        "total": total
-                    }
-                ]
-            }
-    # ---------------- REMOVE ----------------
-    if message.startswith("remove"):
-        item = find_menu_item(message)
-        if item:
-            return {
-                "response":
-                f"{item} removed from your basket.",
-                "actions":[
-                    {
-                        "action":"remove",
-                        "item":item
-                    }
-                ]
-            }
-    ai_reply = get_ai_response(session_id, request.message, cart_str)
-    lower = ai_reply.lower()
+    # 1. Check for confirmation flow first
     if pending_confirmation.get(session_id):
-        if message in ["yes","place order","confirm","ok","okay"]:
+        if message_lower in ["yes", "place order", "confirm", "ok", "okay", "proceed"]:
             pending_confirmation.pop(session_id)
             waiting_for_name[session_id] = True
             return {
-                "response":
-                "Great! Before I place your order, may I know your name?",
-                "actions":[]
+                "response": "Great! Before I place your order, may I know your name?",
+                "actions": []
             }
+
     if waiting_for_name.get(session_id):
         waiting_for_name.pop(session_id)
-        customer_names[session_id] = request.message.strip()
+        cust_name = message.strip() or "Guest Customer"
+        customer_names[session_id] = cust_name
         return {
-            "response":
-            f"Thank you {customer_names[session_id]}.\n\nYour order has been confirmed.\nORDER CONFIRMED",
-            "actions":[
+            "response": f"Thank you {cust_name}.\n\nYour order has been confirmed.\nORDER CONFIRMED",
+            "actions": [
                 {
-                    "action":"place_order",
-                    "customer":customer_names[session_id]
+                    "action": "place_order",
+                    "customer": cust_name
                 }
             ]
         }
+
+    # 2. Check deterministic cart intent parsing
+    intent_actions = parse_cart_intent(message, request.cart)
+    if intent_actions:
+        action_obj = intent_actions[0]
+        acttype = action_obj["action"]
+
+        if acttype == "clear_cart":
+            return {
+                "response": "Your basket has been cleared. Would you like to start a new order?",
+                "actions": intent_actions
+            }
+        elif acttype == "remove_item":
+            item_name = action_obj["item"]
+            return {
+                "response": f"{item_name} has been removed from your basket. Would you like to add anything else or place your order?",
+                "actions": intent_actions
+            }
+        elif acttype in ["set_quantity", "add_quantity", "reduce_quantity"]:
+            item_name = action_obj["item"]
+            pending_confirmation[session_id] = True
+
+            if acttype == "set_quantity":
+                resp_text = f"Set {item_name} quantity to {action_obj['quantity']} in your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
+            elif acttype == "add_quantity":
+                resp_text = f"Added {action_obj['quantity']} {item_name} to your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
+            else: # reduce_quantity
+                resp_text = f"Reduced {item_name} by {action_obj['quantity']}. Would you like to modify anything else, or should I place your order? Reply yes to confirm."
+
+            return {
+                "response": resp_text,
+                "actions": intent_actions
+            }
+
+    # 3. Fallback to AI LLM response
+    ai_reply = get_ai_response(session_id, request.message, cart_str)
+    lower = ai_reply.lower()
+
     actions = []
     for item, price in MENU.items():
-
         if re.search(rf"\b{re.escape(item.lower())}\b", lower):
-            number_words = {
-                "one":1,
-                "two":2,
-                "three":3,
-                "four":4,
-                "five":5,
-                "six":6,
-                "seven":7,
-                "eight":8,
-                "nine":9,
-                "ten":10
-            }
-            qty = 1
             match = re.search(
-            rf"(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+{re.escape(item.lower())}",
-            lower
+                rf"(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+{re.escape(item.lower())}",
+                lower
             )
             qty = 1
             if match:
@@ -434,26 +508,54 @@ async def chat_endpoint(request: ChatRequest):
                 if value.isdigit():
                     qty = int(value)
                 else:
-                    qty = NUMBER_WORDS[value]
-                actions.append({
-                    "action":"add",
-                    "item":item,
-                    "price":price,
-                    "quantity":qty
-                })
+                    qty = NUMBER_WORDS.get(value, 1)
+            actions.append({
+                "action": "add_quantity",
+                "item": item,
+                "price": price,
+                "quantity": qty
+            })
+
     if actions:
         pending_confirmation[session_id] = True
         return {
             "response": ai_reply,
             "actions": actions
         }
+
     return {
         "response": ai_reply,
-        "actions":[]
+        "actions": []
     }
+
   
 @app.post("/place_order")
 async def place_order(order: OrderRequest):
+    if not order.items:
+        return JSONResponse(status_code=400, content={"status": "error", "error": "Your basket is empty. Add an item before placing an order."})
+
+    # Validate items & recalculate server-side totals
+    validated_items = []
+    total = 0
+    for item in order.items:
+        name = item.get("name")
+        if not name or name not in MENU:
+            continue
+        qty = max(1, int(item.get("quantity", 1)))
+        price = MENU[name]
+        subtotal = price * qty
+        total += subtotal
+        validated_items.append({
+            "name": name,
+            "quantity": qty,
+            "price": price
+        })
+
+    if not validated_items:
+        return JSONResponse(status_code=400, content={"status": "error", "error": "No valid products found in basket."})
+
+    customer_name = order.customer.strip() if order.customer else "Guest Customer"
+
     styles = getSampleStyleSheet()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer)
@@ -462,13 +564,11 @@ async def place_order(order: OrderRequest):
         Paragraph("<b>Savoury & Sweet Co.</b>", styles["Title"])
     )
     elements.append(
-        Paragraph(f"Customer : {order.customer}", styles["Heading2"])
+        Paragraph(f"Customer : {customer_name}", styles["Heading2"])
     )
     data = [["Item","Qty","Price","Subtotal"]]
-    total = 0
-    for item in order.items:
+    for item in validated_items:
         subtotal = item["price"] * item["quantity"]
-        total += subtotal
         data.append([
             item["name"],
             str(item["quantity"]),
@@ -490,8 +590,8 @@ async def place_order(order: OrderRequest):
     pdf_bytes = buffer.getvalue()
     buffer.close()
     safe_name = "".join(
-        c for c in order.customer if c.isalnum()
-    )
+        c for c in customer_name if c.isalnum()
+    ) or "Guest"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = f"Invoice_{safe_name}_{timestamp}.pdf"
     try:
@@ -504,33 +604,27 @@ async def place_order(order: OrderRequest):
                 "upsert": False
             }
         )
-        print(upload)
-        print(type(upload))
         print("Upload successful")
         invoice_url = supabase.storage.from_("SweetInvoice").get_public_url(file_name)
-        print(invoice_url)
-        print(type(invoice_url))
-        print(invoice_url)
 
         response = supabase.table("orders").insert({
-            "customer": order.customer,
-            "items": order.items,
+            "customer": customer_name,
+            "items": validated_items,
             "total": total,
             "invoice_url": invoice_url
         }).execute()
 
-        print(response)
         print("Inserted Successfully")
         return {
-            "status":"success",
-            "invoice_url":invoice_url
+            "status": "success",
+            "invoice_url": invoice_url
         }
 
     except Exception as e:
-            print("="*60)
-            traceback.print_exc()
-            print("="*60)
-            return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
+        print("="*60)
+        traceback.print_exc()
+        print("="*60)
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
 
 # ════════════════════════════════════════════════════════════════════
 #  WHISPER TRANSCRIPTION (server-side, high-accuracy mode)
