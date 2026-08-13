@@ -210,7 +210,7 @@
     <!-- ═══════════════════════════════════════════════
          LEFT PANEL: Storefront & Menu
     ═══════════════════════════════════════════════ -->
-    <div id="left-panel" class="border-r border-gray-200 bg-white p-6 flex flex-col">
+    <div id="left-panel" class="border-r border-gray-200 bg-white p-6 flex flex-col overflow-hidden">
 
         <!-- Add Dashboard Button -->
         <div class="mb-7 border-b border-gray-100 pb-5 flex justify-between items-center">
@@ -228,7 +228,7 @@
 
         <!-- Menu Grid -->
         <h2 class="text-base font-semibold text-gray-700 mb-3 uppercase tracking-wide">Freshly Baked Menu</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-5" style="overflow-y:auto;max-height:calc(100vh - 280px)">
+        <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-3" style="flex:1;overflow-y:auto;min-height:0">
 
             <!-- 1. Alfredo Spaghetti -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
@@ -482,27 +482,25 @@
 
         </div><!-- /menu-grid -->
 
-        <!-- Basket Summary -->
-        <div class="bg-gray-900 text-white rounded-2xl p-5 shadow-xl mt-auto">
-            <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-3">
-                <h3 class="font-semibold text-base">Your Basket</h3>
-                <button id="clear-cart-btn" class="text-xs bg-red-500 hover:bg-red-600 transition-colors px-3 py-1 rounded-full font-medium">Clear All</button>
+        <!-- Basket Summary (compact) -->
+        <div class="bg-gray-900 text-white rounded-2xl px-4 py-3 shadow-xl flex-shrink-0">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-semibold text-sm">Your Basket</h3>
+                <button id="clear-cart-btn" class="text-xs bg-red-500 hover:bg-red-600 transition-colors px-2.5 py-0.5 rounded-full font-medium">Clear All</button>
             </div>
-            <div id="cart-items" class="space-y-1.5 mb-4 text-sm text-gray-300 min-h-[40px]">
+            <div id="cart-items" class="space-y-1 mb-2 text-xs text-gray-300 max-h-24 overflow-y-auto">
                 <p class="italic text-gray-500">Your basket is empty.</p>
             </div>
-            <div class="mt-4"><button id="place-order" class="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-2 font-semibold">
-                Place Order
-            </button></div>
-            <div class="flex justify-between items-end border-t border-gray-700 pt-3">
-                <div>
-                    <p class="text-xs text-gray-400" id="prep-time">Prep Time: --</p>
-                    <p class="text-xs text-gray-400 mt-1" id="special-note">Add items to see estimates.</p>
-                </div>
+            <div class="flex items-center gap-3">
+                <button id="place-order" class="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-1.5 font-semibold text-sm">Place Order</button>
                 <div class="text-right">
-                    <p class="text-xs text-gray-400">Total Due</p>
-                    <p class="text-2xl font-extrabold text-emerald-400" id="cart-total">₹0</p>
+                    <p class="text-xs text-gray-400">Total</p>
+                    <p class="text-lg font-extrabold text-emerald-400 leading-none" id="cart-total">₹0</p>
                 </div>
+            </div>
+            <div class="flex gap-4 mt-1.5">
+                <p class="text-xs text-gray-500" id="prep-time">Prep Time: --</p>
+                <p class="text-xs text-gray-500" id="special-note">Add items to see estimates.</p>
             </div>
         </div>
 
