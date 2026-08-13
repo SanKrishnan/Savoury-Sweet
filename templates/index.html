@@ -228,7 +228,7 @@
 
         <!-- Menu Grid -->
         <h2 class="text-base font-semibold text-gray-700 mb-3 uppercase tracking-wide">Freshly Baked Menu</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-5 flex-1">
+        <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-5" style="overflow-y:auto;max-height:calc(100vh - 280px)">
 
             <!-- 1. Alfredo Spaghetti -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
@@ -382,8 +382,6 @@
                 <button onclick="addToCart('Donut', 50)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
-            </div>
-
             <!-- 19. Kachori -->
             <div class="menu-item border border-gray-100 rounded-2xl p-3 bg-gray-50 flex flex-col shadow-sm h-[320px]">
                 <img src="/static/products/kachori.jpg" alt="Kachori" class="w-full h-56 object-cover rounded-xl mb-2" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
@@ -482,7 +480,7 @@
                 <button onclick="addToCart('Veg Sandwich', 60)" class="mt-auto w-full bg-gray-900 text-white py-1.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium">Add to Basket</button>
             </div>
 
-        </div>
+        </div><!-- /menu-grid -->
 
         <!-- Basket Summary -->
         <div class="bg-gray-900 text-white rounded-2xl p-5 shadow-xl mt-auto">
