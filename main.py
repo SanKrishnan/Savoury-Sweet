@@ -16,8 +16,44 @@ from supabase import create_client
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from datetime import datetime
 import traceback
+
+# ── Register TrueType Fonts for Unicode (₹ Rupee Symbol) ────────────
+FONTS_DIR = os.path.join(os.path.dirname(__file__), "static", "fonts")
+DEJAVU_REG = os.path.join(FONTS_DIR, "DejaVuSans.ttf")
+DEJAVU_BOLD = os.path.join(FONTS_DIR, "DejaVuSans-Bold.ttf")
+DEJAVU_OBL = os.path.join(FONTS_DIR, "DejaVuSans-Oblique.ttf")
+DEJAVU_BOLDOBL = os.path.join(FONTS_DIR, "DejaVuSans-BoldOblique.ttf")
+
+PDF_FONT_NORMAL = "Helvetica"
+PDF_FONT_BOLD = "Helvetica-Bold"
+
+if os.path.exists(DEJAVU_REG):
+    pdfmetrics.registerFont(TTFont("DejaVuSans", DEJAVU_REG))
+    PDF_FONT_NORMAL = "DejaVuSans"
+
+if os.path.exists(DEJAVU_BOLD):
+    pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", DEJAVU_BOLD))
+    PDF_FONT_BOLD = "DejaVuSans-Bold"
+
+if os.path.exists(DEJAVU_OBL):
+    pdfmetrics.registerFont(TTFont("DejaVuSans-Oblique", DEJAVU_OBL))
+
+if os.path.exists(DEJAVU_BOLDOBL):
+    pdfmetrics.registerFont(TTFont("DejaVuSans-BoldOblique", DEJAVU_BOLDOBL))
+
+if os.path.exists(DEJAVU_REG) and os.path.exists(DEJAVU_BOLD):
+    registerFontFamily(
+        "DejaVuSans",
+        normal="DejaVuSans",
+        bold="DejaVuSans-Bold",
+        italic="DejaVuSans-Oblique" if os.path.exists(DEJAVU_OBL) else "DejaVuSans",
+        boldItalic="DejaVuSans-BoldOblique" if os.path.exists(DEJAVU_BOLDOBL) else "DejaVuSans-Bold"
+    )
 
 load_dotenv()
 
@@ -691,14 +727,19 @@ async def place_order(order: OrderRequest):
     customer_name = order.customer.strip() if order.customer else "Guest Customer"
 
     styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    title_style.fontName = PDF_FONT_BOLD
+    h2_style = styles["Heading2"]
+    h2_style.fontName = PDF_FONT_NORMAL
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer)
     elements = []
     elements.append(
-        Paragraph("<b>Savoury & Sweet Co.</b>", styles["Title"])
+        Paragraph("<b>Savoury & Sweet Co.</b>", title_style)
     )
     elements.append(
-        Paragraph(f"Customer : {customer_name}", styles["Heading2"])
+        Paragraph(f"Customer : {customer_name}", h2_style)
     )
     data = [["Item","Qty","Price","Subtotal"]]
     for item in validated_items:
@@ -712,6 +753,9 @@ async def place_order(order: OrderRequest):
     data.append(["","","Total",f"₹{total}"])
     table = Table(data)
     table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), PDF_FONT_NORMAL),
+        ("FONTNAME", (0, 0), (-1, 0), PDF_FONT_BOLD),
+        ("FONTNAME", (-2, -1), (-1, -1), PDF_FONT_BOLD),
         ("BACKGROUND",(0,0),(-1,0),colors.grey),
         ("TEXTCOLOR",(0,0),(-1,0),colors.whitesmoke),
         ("GRID",(0,0),(-1,-1),1,colors.black),
