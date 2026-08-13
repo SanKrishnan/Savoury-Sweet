@@ -175,8 +175,9 @@ MENU = {
     "Chocolate Shake": 120,
     "Mango Shake": 110,
 }
+
 NUMBER_WORDS = {
-    "one": 1, "a": 1, "an": 1, "single": 1,
+    "one": 1, "a": 1, "an": 1, "single": 1, "another": 1,
     "two": 2,
     "three": 3,
     "four": 4,
@@ -190,46 +191,71 @@ NUMBER_WORDS = {
 
 ALIASES = [
     ("black forest cake", "Black Forest Cake"),
+    ("black forest cakes", "Black Forest Cake"),
     ("black forest", "Black Forest Cake"),
     ("red velvet cake", "Red Velvet Cake"),
+    ("red velvet cakes", "Red Velvet Cake"),
     ("red velvet", "Red Velvet Cake"),
     ("butterscotch cake", "Butterscotch Cake"),
+    ("butterscotch cakes", "Butterscotch Cake"),
     ("butterscotch", "Butterscotch Cake"),
     ("chocolate cake", "Chocolate Cake"),
+    ("chocolate cakes", "Chocolate Cake"),
     ("vanilla cake", "Vanilla Cake"),
+    ("vanilla cakes", "Vanilla Cake"),
     ("cheesy garlic bread", "Cheesy Garlic Bread"),
     ("garlic bread", "Cheesy Garlic Bread"),
     ("alfredo spaghetti", "Alfredo Spaghetti"),
     ("alfredo", "Alfredo Spaghetti"),
     ("spaghetti", "Alfredo Spaghetti"),
     ("chocolate brownie", "Chocolate Brownie"),
+    ("chocolate brownies", "Chocolate Brownie"),
+    ("brownies", "Chocolate Brownie"),
     ("brownie", "Chocolate Brownie"),
     ("chocolate cupcake", "Chocolate Cupcake"),
+    ("chocolate cupcakes", "Chocolate Cupcake"),
     ("chocolate donut", "Chocolate Donut"),
+    ("chocolate donuts", "Chocolate Donut"),
     ("chocolate shake", "Chocolate Shake"),
+    ("chocolate shakes", "Chocolate Shake"),
     ("choco chip cookies", "Choco Chip Cookies"),
     ("choco chip cookie", "Choco Chip Cookies"),
     ("choco chip", "Choco Chip Cookies"),
     ("butter croissant", "Butter Croissant"),
+    ("butter croissants", "Butter Croissant"),
+    ("croissants", "Butter Croissant"),
     ("croissant", "Butter Croissant"),
     ("blueberry muffin", "Blueberry Muffin"),
+    ("blueberry muffins", "Blueberry Muffin"),
     ("masala sandwich", "Masala Sandwich"),
+    ("masala sandwiches", "Masala Sandwich"),
     ("cheese sandwich", "Cheese Sandwich"),
+    ("cheese sandwiches", "Cheese Sandwich"),
     ("veg sandwich", "Veg Sandwich"),
-    ("sandwich", "Veg Sandwich"),
+    ("veg sandwiches", "Veg Sandwich"),
+    ("vada pavs", "Vada Pav"),
     ("vada pav", "Vada Pav"),
     ("vada", "Vada Pav"),
     ("aloo tikki", "Aloo Tikki"),
     ("paneer puff", "Paneer Puff"),
+    ("paneer puffs", "Paneer Puff"),
     ("veg puff", "Veg Puff"),
+    ("veg puffs", "Veg Puff"),
     ("cold coffee", "Cold Coffee"),
+    ("coffee", "Cold Coffee"),
     ("mango shake", "Mango Shake"),
+    ("mango shakes", "Mango Shake"),
+    ("samosas", "Samosa"),
     ("samosa", "Samosa"),
+    ("kachoris", "Kachori"),
     ("kachori", "Kachori"),
+    ("cupcakes", "Cupcake"),
     ("cupcake", "Cupcake"),
+    ("muffins", "Muffin"),
     ("muffin", "Muffin"),
     ("cookies", "Cookies"),
     ("cookie", "Cookies"),
+    ("donuts", "Donut"),
     ("donut", "Donut"),
 ]
 
@@ -245,55 +271,112 @@ def find_menu_item(text):
 
 def extract_number(text):
     text_lower = text.lower()
-    match = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|single)\b", text_lower)
+    match = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|single|another)\b", text_lower)
     if match:
         val = match.group(1)
         if val.isdigit():
             return int(val)
         return NUMBER_WORDS.get(val, 1)
-    return 1
+    return None
 
 def parse_cart_intent(user_text, cart_list):
     text = user_text.lower().strip()
-    explicit_item = find_menu_item(text)
-    target_item = explicit_item
-
-    # If no target item explicitly mentioned in text, fallback to last item in cart
-    if not target_item and cart_list:
-        target_item = cart_list[-1]["name"]
+    actions = []
 
     # 1. Clear cart
     if any(k in text for k in ["clear cart", "empty cart", "clear basket", "empty basket", "remove everything"]):
         return [{"action": "clear_cart"}]
 
-    # 2. Complete removal of named item
-    if (text.startswith("remove ") or text.startswith("delete ") or text.startswith("drop ")) and explicit_item:
-        return [{"action": "remove_item", "item": explicit_item}]
+    # 2. Check REPLACE INTENT
+    replace_match = re.search(r"\b(replace|swap|change)\b", text)
+    if replace_match:
+        parts = re.split(r"\b(with|to|for)\b", text)
+        old_item = None
+        new_item = None
 
-    # 3. REDUCE / DECREASE
-    if any(k in text for k in ["remove one", "reduce", "decrease", "take away", "minus", "less"]):
-        qty = extract_number(text)
-        if target_item:
-            return [{"action": "reduce_quantity", "item": target_item, "quantity": qty}]
+        if len(parts) >= 3:
+            first_part = parts[0]
+            second_part = "".join(parts[2:])
+            old_item = find_menu_item(first_part)
+            new_item = find_menu_item(second_part)
 
-    # 4. SET QUANTITY
-    if any(k in text for k in ["make", "change", "set", "keep", "only"]):
-        qty = extract_number(text)
-        if target_item:
-            return [{"action": "set_quantity", "item": target_item, "price": MENU[target_item], "quantity": qty}]
+        if not new_item:
+            new_item = find_menu_item(text)
 
-    # 5. ADD QUANTITY
-    if any(k in text for k in ["more", "add", "another", "plus"]):
-        qty = extract_number(text)
-        if target_item:
-            return [{"action": "add_quantity", "item": target_item, "price": MENU[target_item], "quantity": qty}]
+        if new_item:
+            if not old_item and cart_list:
+                old_item = cart_list[-1]["name"]
 
-    # 6. Default ADD if explicit item found
-    if target_item:
-        qty = extract_number(text)
-        return [{"action": "add_quantity", "item": target_item, "price": MENU[target_item], "quantity": qty}]
+            explicit_qty = extract_number(text)
+            old_qty = 1
+            if old_item and cart_list:
+                existing_old = next((i for i in cart_list if i["name"] == old_item), None)
+                if existing_old:
+                    old_qty = existing_old["quantity"]
+
+            final_qty = explicit_qty if explicit_qty is not None else old_qty
+
+            if old_item and old_item != new_item:
+                return [{
+                    "action": "replace_item",
+                    "old_item": old_item,
+                    "new_item": new_item,
+                    "quantity": final_qty,
+                    "price": MENU[new_item]
+                }]
+            elif not old_item:
+                return [{
+                    "action": "set_quantity",
+                    "item": new_item,
+                    "price": MENU[new_item],
+                    "quantity": final_qty
+                }]
+
+    # 3. Check MULTI-ITEM OR SINGLE ITEM ADD/SET/REDUCE
+    segments = re.split(r"[,+&]|\band\b", text)
+
+    for seg in segments:
+        seg_str = seg.strip()
+        if not seg_str:
+            continue
+
+        item = find_menu_item(seg_str)
+        if not item:
+            continue
+
+        num = extract_number(seg_str)
+        qty = num if num is not None else 1
+
+        if "remove" in seg_str or "delete" in seg_str or "drop" in seg_str:
+            if "one" in seg_str or "1" in seg_str:
+                actions.append({"action": "reduce_quantity", "item": item, "quantity": qty})
+            else:
+                actions.append({"action": "remove_item", "item": item})
+        elif "reduce" in seg_str or "decrease" in seg_str or "minus" in seg_str:
+            actions.append({"action": "reduce_quantity", "item": item, "quantity": qty})
+        elif any(k in seg_str for k in ["make", "set", "only"]):
+            actions.append({"action": "set_quantity", "item": item, "price": MENU[item], "quantity": qty})
+        elif "another" in seg_str or "more" in seg_str or "add" in seg_str or "plus" in seg_str:
+            actions.append({"action": "add_quantity", "item": item, "price": MENU[item], "quantity": qty})
+        else:
+            actions.append({"action": "add_quantity", "item": item, "price": MENU[item], "quantity": qty})
+
+    if actions:
+        return actions
+
+    fallback_item = cart_list[-1]["name"] if cart_list else None
+    if fallback_item:
+        num = extract_number(text)
+        qty = num if num is not None else 1
+        if any(k in text for k in ["make", "set", "only"]):
+            return [{"action": "set_quantity", "item": fallback_item, "price": MENU[fallback_item], "quantity": qty}]
+        elif any(k in text for k in ["reduce", "decrease", "remove one", "minus"]):
+            return [{"action": "reduce_quantity", "item": fallback_item, "quantity": qty}]
+        elif any(k in text for k in ["add", "more", "another"]):
+            return [{"action": "add_quantity", "item": fallback_item, "price": MENU[fallback_item], "quantity": qty}]
 
     return []
+
 def get_ai_response(session_id: str, user_text: str, cart_data: str = "Empty") -> str:
     """Supports both Ollama and Groq."""
     if session_id not in sessions:
