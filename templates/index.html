@@ -1006,6 +1006,20 @@ async function sendMessage(text) {
                 if (action.action === "clear_cart") {
                     clearCart();
                 }
+                if (action.action === "replace_item") {
+                    cart = cart.filter(i => i.name !== action.old_item);
+                    const existing = cart.find(i => i.name === action.new_item);
+                    if (existing) {
+                        existing.quantity = action.quantity;
+                    } else {
+                        cart.push({
+                            name: action.new_item,
+                            price: action.price,
+                            quantity: action.quantity
+                        });
+                    }
+                    renderCart();
+                }
                 if (action.action === "place_order") {
                     placeOrder(action.customer);
                 }

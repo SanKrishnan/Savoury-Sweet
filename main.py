@@ -333,7 +333,8 @@ def parse_cart_intent(user_text, cart_list):
                 }]
 
     # 3. Check MULTI-ITEM OR SINGLE ITEM ADD/SET/REDUCE
-    segments = re.split(r"[,+&]|\band\b", text)
+    is_global_set = bool(re.match(r"^(make|set)\b", text))
+    segments = re.split(r"[,+&]|\b(?:and|plus)\b", text)
 
     for seg in segments:
         seg_str = seg.strip()
@@ -354,7 +355,7 @@ def parse_cart_intent(user_text, cart_list):
                 actions.append({"action": "remove_item", "item": item})
         elif "reduce" in seg_str or "decrease" in seg_str or "minus" in seg_str:
             actions.append({"action": "reduce_quantity", "item": item, "quantity": qty})
-        elif any(k in seg_str for k in ["make", "set", "only"]):
+        elif any(k in seg_str for k in ["make", "set", "only"]) or is_global_set:
             actions.append({"action": "set_quantity", "item": item, "price": MENU[item], "quantity": qty})
         elif "another" in seg_str or "more" in seg_str or "add" in seg_str or "plus" in seg_str:
             actions.append({"action": "add_quantity", "item": item, "price": MENU[item], "quantity": qty})
@@ -376,6 +377,69 @@ def parse_cart_intent(user_text, cart_list):
             return [{"action": "add_quantity", "item": fallback_item, "price": MENU[fallback_item], "quantity": qty}]
 
     return []
+
+def format_action_list(phrases):
+    if not phrases:
+        return ""
+    if len(phrases) == 1:
+        return phrases[0]
+    if len(phrases) == 2:
+        return f"{phrases[0]} and {phrases[1]}"
+    return ", ".join(phrases[:-1]) + f" and {phrases[-1]}"
+
+def build_cart_response(actions):
+    if not actions:
+        return ""
+
+    if len(actions) == 1 and actions[0]["action"] == "clear_cart":
+        return "Your basket has been cleared. Would you like to start a new order?"
+
+    act_types = set(a["action"] for a in actions)
+
+    if act_types == {"add_quantity"}:
+        items = [f"{a['quantity']} {a['item']}" for a in actions]
+        main_sentence = f"Added {format_action_list(items)} to your basket."
+    elif act_types == {"set_quantity"}:
+        if len(actions) == 1:
+            main_sentence = f"Set {actions[0]['item']} quantity to {actions[0]['quantity']} in your basket."
+        else:
+            items = [f"{a['item']} to {a['quantity']}" for a in actions]
+            main_sentence = f"Set {format_action_list(items)} in your basket."
+    elif act_types == {"reduce_quantity"}:
+        if len(actions) == 1:
+            main_sentence = f"Reduced {actions[0]['item']} by {actions[0]['quantity']}."
+        else:
+            items = [f"{a['item']} by {a['quantity']}" for a in actions]
+            main_sentence = f"Reduced {format_action_list(items)} in your basket."
+    elif act_types == {"remove_item"}:
+        items = [a["item"] for a in actions]
+        main_sentence = f"Removed {format_action_list(items)} from your basket."
+    elif act_types == {"replace_item"}:
+        a = actions[0]
+        qty_str = f"{a['quantity']} " if a.get("quantity", 1) > 1 else ""
+        main_sentence = f"Replaced {a['old_item']} with {qty_str}{a['new_item']} in your basket."
+    else:
+        # Mixed actions
+        phrases = []
+        for a in actions:
+            at = a["action"]
+            if at == "add_quantity":
+                phrases.append(f"added {a['quantity']} {a['item']}")
+            elif at == "set_quantity":
+                phrases.append(f"set {a['item']} to {a['quantity']}")
+            elif at == "reduce_quantity":
+                phrases.append(f"reduced {a['item']} by {a['quantity']}")
+            elif at == "remove_item":
+                phrases.append(f"removed {a['item']}")
+            elif at == "replace_item":
+                qty_str = f"{a['quantity']} " if a.get("quantity", 1) > 1 else ""
+                phrases.append(f"replaced {a['old_item']} with {qty_str}{a['new_item']}")
+
+        joined = format_action_list(phrases)
+        main_sentence = joined[0].upper() + joined[1:] + " in your basket."
+
+    follow_up = " Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
+    return main_sentence + follow_up
 
 def get_ai_response(session_id: str, user_text: str, cart_data: str = "Empty") -> str:
     """Supports both Ollama and Groq."""
@@ -524,47 +588,18 @@ async def chat_endpoint(request: ChatRequest):
     intent_actions = parse_cart_intent(message, request.cart)
 
     if intent_actions:
-        action_obj = intent_actions[0]
-        acttype = action_obj["action"]
-
         # Any real cart action clears the confirmation gate
         pending_confirmation.pop(session_id, None)
 
-        if acttype == "clear_cart":
-            return {
-                "response": "Your basket has been cleared. Would you like to start a new order?",
-                "actions": intent_actions
-            }
-        elif acttype == "remove_item":
-            item_name = action_obj["item"]
-            return {
-                "response": f"{item_name} has been removed from your basket. Would you like to add anything else or place your order?",
-                "actions": intent_actions
-            }
-        elif acttype == "replace_item":
-            old = action_obj["old_item"]
-            new = action_obj["new_item"]
-            qty = action_obj["quantity"]
-            pending_confirmation[session_id] = True
-            return {
-                "response": f"Done! Replaced {old} with {qty} {new} in your basket. Would you like to add anything else or place your order? Reply yes to confirm.",
-                "actions": intent_actions
-            }
-        elif acttype in ["set_quantity", "add_quantity", "reduce_quantity"]:
-            item_name = action_obj["item"]
+        # Set pending confirmation if any action modified the cart (and not clear_cart)
+        if not (len(intent_actions) == 1 and intent_actions[0].get("action") == "clear_cart"):
             pending_confirmation[session_id] = True
 
-            if acttype == "set_quantity":
-                resp_text = f"Set {item_name} quantity to {action_obj['quantity']} in your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
-            elif acttype == "add_quantity":
-                resp_text = f"Added {action_obj['quantity']} {item_name} to your basket. Would you like to add anything else, remove or modify any item, or should I place your order? Reply yes to confirm."
-            else:  # reduce_quantity
-                resp_text = f"Reduced {item_name} by {action_obj['quantity']}. Would you like to modify anything else, or should I place your order? Reply yes to confirm."
-
-            return {
-                "response": resp_text,
-                "actions": intent_actions
-            }
+        resp_text = build_cart_response(intent_actions)
+        return {
+            "response": resp_text,
+            "actions": intent_actions
+        }
 
     # 2. No cart-modify intent — now check the confirmation gate.
     if waiting_for_name.get(session_id):
