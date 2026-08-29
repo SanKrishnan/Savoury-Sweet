@@ -2,9 +2,10 @@
 
 ### *A Hybrid Local-First & Production-Grade Conversational AI Ordering Platform*
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-brightgreen?style=for-the-badge\&logo=vercel\&logoColor=white)](https://savoury-sweet.vercel.app/)
-[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge\&logo=fastapi\&logoColor=white)](https://fastapi.tiangolo.com/)
-[![AI Engine](https://img.shields.io/badge/AI%20Engine-Llama%203.2%20%2F%203.3-blueviolet?style=for-the-badge\&logo=meta\&logoColor=white)](#-dual-environment-engine)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-brightgreen?style=for-the-badge&logo=vercel&logoColor=white)](https://savoury-sweet.vercel.app/)
+[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![AI Engine](https://img.shields.io/badge/AI%20Engine-Llama%203.2%20%2F%203.3-blueviolet?style=for-the-badge&logo=meta&logoColor=white)](#-dual-environment-engine)
+[![Analytics](https://img.shields.io/badge/Analytics-Chart.js%20%26%20Power%20BI-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)](#-executive-analytics-dashboard-chartjs--power-bi)
 
 **🌐 Live Demo:** https://savoury-sweet.vercel.app/
 
@@ -97,11 +98,22 @@ Supports
 
 ---
 
+### 📊 Executive Analytics Dashboard (Chart.js & Power BI)
+
+The platform includes a real-time business intelligence and analytics suite to monitor bakery performance and ordering trends:
+
+* **In-App Analytics Dashboard (`/dashboard`)**: Built with **Chart.js** and Tailwind CSS, providing real-time KPI tracking for **Total Revenue**, **Total Orders**, **Units Sold**, and **Average Order Value (AOV)**.
+* **Interactive Visualizations**: Dynamic charts for daily revenue trajectories, product category sales mix, best-selling bakery items, and unit volume metrics.
+* **Flexible Date Horizons & Filtering**: Instant time-range slicing (*Today*, *This Week*, *This Month*, *This Quarter*, *This Year*, *All-Time*) and per-product performance breakdowns.
+* **Power BI Local Integration**: Connect **Microsoft Power BI** locally to the Supabase PostgreSQL database or local backend to build advanced business intelligence reports, custom DAX measures, predictive sales forecasting, and executive reporting locally on your desktop.
+
+---
+
 ### 📄 Invoice Generation
 
 After confirmation, the application
 
-* Generates a PDF invoice using ReportLab
+* Generates a PDF invoice using ReportLab (with full Unicode ₹ symbol support)
 * Uploads the invoice to **Supabase Storage**
 * Stores order details in the **Supabase Orders Table**
 * Returns a public invoice URL
@@ -138,6 +150,7 @@ Customers can browse the menu, interact with the AI assistant, and place orders 
 * CSS3
 * JavaScript
 * Tailwind CSS
+* Chart.js (Real-time Web Analytics Dashboard)
 
 ### Backend
 
@@ -151,14 +164,19 @@ Customers can browse the menu, interact with the AI assistant, and place orders 
 * Llama 3.2
 * Llama 3.3 70B
 
-### Cloud
+### Cloud & Database
 
-* Supabase Database
-* Supabase Storage
+* Supabase Database (PostgreSQL)
+* Supabase Storage (Invoices)
+
+### Analytics & Business Intelligence
+
+* **Chart.js** (In-app real-time analytics)
+* **Power BI** (Local desktop BI analytics, custom DAX metrics & executive reporting)
 
 ### Utilities
 
-* ReportLab
+* ReportLab (PDF Invoice Generation with Unicode TTF support)
 * Jinja2
 * Python Speech APIs
 
@@ -202,17 +220,23 @@ OPENAI_API_KEY=YOUR_KEY
 
 ---
 
-## Run
+## Run Locally
 
 ```bash
 python main.py
 ```
 
-Open
+* **Storefront & AI Assistant:** `http://localhost:8000`
+* **Executive Analytics Dashboard:** `http://localhost:8000/dashboard`
 
-```
-http://localhost:8000
-```
+### 📊 Power BI Local Integration
+
+To run Power BI reports locally with live bakery order data:
+
+1. Open **Microsoft Power BI Desktop**.
+2. Select **Get Data** &rarr; **PostgreSQL database** (or **Web / REST API** pointing to `http://localhost:8000/api/analytics`).
+3. Connect using your Supabase database credentials or local analytics endpoint.
+4. Model your datasets to analyze sales trends, top product margins, and customer order behaviors in Power BI with custom DAX measures and visualizations.
 
 ---
 
