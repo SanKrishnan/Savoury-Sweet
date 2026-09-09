@@ -3,7 +3,8 @@ import io
 import re
 import requests
 import uvicorn
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException
+import sys
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -62,10 +63,11 @@ app = FastAPI(title="Savoury & Sweet Co.")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-supabase = create_client(
-    SUPABASE_URL,
-    SUPABASE_KEY
-)
+if SUPABASE_URL and SUPABASE_KEY:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+else:
+    supabase = None
+    print("Supabase configuration missing: SUPABASE_URL and/or SUPABASE_KEY not set.", file=sys.stderr)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
