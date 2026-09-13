@@ -795,8 +795,8 @@ if (window.speechSynthesis.onvoiceschanged !== undefined) {
 // ════════════════════════════════════════════════════════
 // SPEECH RECOGNITION (Browser STT + Whisper fallback)
 // ════════════════════════════════════════════════════════
-const accentSelect = document.getElementById('accent-select');
-const sttModeSelect = document.getElementById('stt-mode');
+const accentSelect = document.getElementById('accent-select') || { value: 'en-IN' };
+const sttModeSelect = document.getElementById('stt-mode') || { value: 'browser' };
 const micBtn        = document.getElementById('mic-btn');
 const messageInput  = document.getElementById('message-input');
 

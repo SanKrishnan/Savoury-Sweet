@@ -84,10 +84,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 AI_PROVIDER = os.getenv("AI_PROVIDER", "groq").lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv(
-    "GROQ_MODEL",
-    "llama-3.3-70b-versatile"
-)
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+GROQ_MODEL = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+# Fallback if deprecated model is set
+if GROQ_MODEL in ["llama-3.3-70b-versatile", "llama3-70b"]:
+    print(f"[WARN] Deprecated Groq model '{GROQ_MODEL}' configured. Falling back to {DEFAULT_GROQ_MODEL}.")
+    GROQ_MODEL = DEFAULT_GROQ_MODEL
 
 # ── System Prompt ────────────────────────────────────────────────────
 SYSTEM_PROMPT = """
@@ -171,7 +173,11 @@ sessions: Dict[str, List[str]] = {}
 pending_confirmation: Dict[str, bool] = {}
 waiting_for_name: Dict[str, bool] = {}
 customer_names: Dict[str, str] = {}
+# Store tentative name awaiting confirmation
+name_confirmation_pending: Dict[str, str] = {}
 
+
+awaiting_manual_name: Dict[str, bool] = {}  # True when awaiting typed name after STT name rejected
 
 class ChatRequest(BaseModel):
     message: str
@@ -640,28 +646,39 @@ async def chat_endpoint(request: ChatRequest):
         }
 
     # 2. No cart-modify intent — now check the confirmation gate.
+    # Name handling – first stage: capture spoken name and ask for confirmation.
     if waiting_for_name.get(session_id):
         waiting_for_name.pop(session_id)
-        cust_name = message.strip() or "Guest Customer"
-        customer_names[session_id] = cust_name
-        return {
-            "response": f"Thank you {cust_name}.\n\nYour order has been confirmed.\nORDER CONFIRMED",
-            "actions": [
-                {
-                    "action": "place_order",
-                    "customer": cust_name
-                }
-            ]
-        }
+        tentative = message.strip() or "Guest Customer"
+        name_confirmation_pending[session_id] = tentative
+        return {"response": f'I heard your name as "{tentative}". Is that correct?', "actions": []}
 
     if pending_confirmation.get(session_id):
-        if message_lower in ["yes", "place order", "confirm", "ok", "okay", "proceed"]:
+        # User responded to "Would you like to add anything else?"
+        if message_lower in ["yes", "y", "sure", "yeah"]:
+            # Continue adding items
+            pending_confirmation.pop(session_id)
+            return {"response": "Sure, what would you like to add?", "actions": []}
+        elif message_lower in ["no", "n", "nope"]:
+            # Finished adding, move to name request
             pending_confirmation.pop(session_id)
             waiting_for_name[session_id] = True
-            return {
-                "response": "Great! Before I place your order, may I know your name?",
-                "actions": []
-            }
+            return {"response": "Great! Before I place your order, may I know your name?", "actions": []}
+        elif message_lower in ["place order", "confirm", "ok", "okay", "proceed"]:
+            # User wants to place order directly, ask for name first
+            pending_confirmation.pop(session_id)
+            waiting_for_name[session_id] = True
+            return {"response": "Before I place your order, may I know your name?", "actions": []}
+        # fall through to fallback if ambiguous
+
+    if name_confirmation_pending.get(session_id):
+        tentative = name_confirmation_pending.pop(session_id)
+        if message_lower in ["yes", "y", "correct", "right"]:
+            cust_name = tentative
+            customer_names[session_id] = cust_name
+            return {"response": f"Thank you {cust_name}.\n\nYour order has been confirmed.\nORDER CONFIRMED", "actions": [{"action": "place_order", "customer": cust_name}]}
+        else:
+            return {"response": "Please type your name in the input box.", "actions": []}
 
     # 3. Fallback to AI LLM response
     ai_reply = get_ai_response(session_id, request.message, cart_str)
@@ -774,7 +791,8 @@ async def place_order(order: OrderRequest):
     ) or "Guest"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = f"Invoice_{safe_name}_{timestamp}.pdf"
-    try:
+    if supabase is None:
+    raise HTTPException(status_code=500, detail="Supabase configuration missing: cannot store invoice or record order.")
         print("Uploading PDF...")
         upload = supabase.storage.from_("SweetInvoice").upload(
             path=file_name,
