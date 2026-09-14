@@ -376,52 +376,226 @@ def parse_cart_intent(user_text, cart_list):
                     "quantity": final_qty
                 }]
 
-    # 3. Check MULTI-ITEM OR SINGLE ITEM ADD/SET/REDUCE
+    # 3. MULTI-ITEM / SINGLE-ITEM ADD, SET, REDUCE, REMOVE
+    #
+    # IMPORTANT:
+    # Do not split only on commas/and/plus.
+    # Voice input can be:
+    # "black forest cake aloo tikki Alfredo Spaghetti"
+    #
+    # Instead, scan the complete sentence for every known MENU/ALIAS item.
+
     is_global_set = bool(re.match(r"^(make|set)\b", text))
-    segments = re.split(r"[,+&]|\b(?:and|plus)\b", text)
 
-    for seg in segments:
-        seg_str = seg.strip()
-        if not seg_str:
-            continue
+    # Build all possible item names from aliases + MENU.
+    # Longest phrases must be checked first so that:
+    # "chocolate cupcake" is detected before "cupcake"
+    # "black forest cake" before "cake", etc.
+    candidates = []
 
-        item = find_menu_item(seg_str)
-        if not item:
-            continue
+    for alias, official in ALIASES:
+        candidates.append((alias.lower(), official))
 
-        num = extract_number(seg_str)
-        qty = num if num is not None else 1
+    for item in MENU:
+        candidates.append((item.lower(), item))
 
-        if "remove" in seg_str or "delete" in seg_str or "drop" in seg_str:
-            if "one" in seg_str or "1" in seg_str:
-                actions.append({"action": "reduce_quantity", "item": item, "quantity": qty})
+    # Remove duplicates and sort longest first
+    candidates = list(set(candidates))
+    candidates.sort(key=lambda x: len(x[0]), reverse=True)
+
+    matches = []
+
+    # Find every menu item anywhere in the user's sentence
+    for alias, official in candidates:
+        pattern = rf"\b{re.escape(alias)}\b"
+
+        for match in re.finditer(pattern, text):
+            matches.append({
+                "start": match.start(),
+                "end": match.end(),
+                "item": official
+            })
+
+    # Sort by position in the sentence
+    matches.sort(key=lambda x: (x["start"], -(x["end"] - x["start"])))
+
+    # Remove overlapping matches.
+    # Example:
+    # "chocolate cupcake"
+    # should not become both Chocolate Cupcake + Cupcake.
+    filtered_matches = []
+    occupied_until = -1
+
+    for match in matches:
+        if match["start"] >= occupied_until:
+            filtered_matches.append(match)
+            occupied_until = match["end"]
+
+    # Extract quantity immediately before each detected item.
+    number_pattern = (
+        r"(?:\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"a|an|single|another)\b)"
+    )
+
+    for idx, match in enumerate(filtered_matches):
+
+        # Text immediately before this item
+        previous_end = (
+            filtered_matches[idx - 1]["end"]
+            if idx > 0
+            else 0
+        )
+
+        prefix = text[previous_end:match["start"]].strip()
+
+        # Look for quantity near the item.
+        # This handles:
+        # "two brownies"
+        # "two chocolate brownies"
+        # "one aloo tikki"
+        # "a mango shake"
+        qty_match = re.search(
+            rf"{number_pattern}\s*$",
+            prefix
+        )
+
+        if qty_match:
+            value = qty_match.group(1)
+
+            if value.isdigit():
+                qty = int(value)
             else:
-                actions.append({"action": "remove_item", "item": item})
-        elif "reduce" in seg_str or "decrease" in seg_str or "minus" in seg_str:
-            actions.append({"action": "reduce_quantity", "item": item, "quantity": qty})
-        elif any(k in seg_str for k in ["make", "set", "only"]) or is_global_set:
-            actions.append({"action": "set_quantity", "item": item, "price": MENU[item], "quantity": qty})
-        elif "another" in seg_str or "more" in seg_str or "add" in seg_str or "plus" in seg_str:
-            actions.append({"action": "add_quantity", "item": item, "price": MENU[item], "quantity": qty})
+                qty = NUMBER_WORDS.get(value, 1)
         else:
-            actions.append({"action": "add_quantity", "item": item, "price": MENU[item], "quantity": qty})
+            qty = 1
+
+        # Prevent invalid quantities
+        qty = max(1, qty)
+
+        # Text around this item, used to determine the action
+        segment_start = (
+            filtered_matches[idx - 1]["end"]
+            if idx > 0
+            else 0
+        )
+
+        segment_end = (
+            filtered_matches[idx + 1]["start"]
+            if idx + 1 < len(filtered_matches)
+            else len(text)
+        )
+
+        segment = text[segment_start:segment_end].strip()
+
+        item = match["item"]
+
+        # REMOVE
+        if any(k in segment for k in [
+            "remove",
+            "delete",
+            "drop",
+            "cancel"
+        ]):
+            if any(k in segment for k in [
+                "one",
+                "1",
+                "one more"
+            ]):
+                actions.append({
+                    "action": "reduce_quantity",
+                    "item": item,
+                    "quantity": qty
+                })
+            else:
+                actions.append({
+                    "action": "remove_item",
+                    "item": item
+                })
+
+        # REDUCE
+        elif any(k in segment for k in [
+            "reduce",
+            "decrease",
+            "minus"
+        ]):
+            actions.append({
+                "action": "reduce_quantity",
+                "item": item,
+                "quantity": qty
+            })
+
+        # SET
+        elif (
+            any(k in segment for k in [
+                "make",
+                "set",
+                "only"
+            ])
+            or is_global_set
+        ):
+            actions.append({
+                "action": "set_quantity",
+                "item": item,
+                "price": MENU[item],
+                "quantity": qty
+            })
+
+        # ADD
+        else:
+            actions.append({
+                "action": "add_quantity",
+                "item": item,
+                "price": MENU[item],
+                "quantity": qty
+            })
 
     if actions:
         return actions
 
+    # Fallback for commands referring to the last item
     fallback_item = cart_list[-1]["name"] if cart_list else None
+
     if fallback_item:
         num = extract_number(text)
         qty = num if num is not None else 1
-        if any(k in text for k in ["make", "set", "only"]):
-            return [{"action": "set_quantity", "item": fallback_item, "price": MENU[fallback_item], "quantity": qty}]
-        elif any(k in text for k in ["reduce", "decrease", "remove one", "minus"]):
-            return [{"action": "reduce_quantity", "item": fallback_item, "quantity": qty}]
-        elif any(k in text for k in ["add", "more", "another"]):
-            return [{"action": "add_quantity", "item": fallback_item, "price": MENU[fallback_item], "quantity": qty}]
+
+        if any(k in text for k in [
+            "make",
+            "set",
+            "only"
+        ]):
+            return [{
+                "action": "set_quantity",
+                "item": fallback_item,
+                "price": MENU[fallback_item],
+                "quantity": qty
+            }]
+
+        elif any(k in text for k in [
+            "reduce",
+            "decrease",
+            "remove one",
+            "minus"
+        ]):
+            return [{
+                "action": "reduce_quantity",
+                "item": fallback_item,
+                "quantity": qty
+            }]
+
+        elif any(k in text for k in [
+            "add",
+            "more",
+            "another"
+        ]):
+            return [{
+                "action": "add_quantity",
+                "item": fallback_item,
+                "price": MENU[fallback_item],
+                "quantity": qty
+            }]
 
     return []
-
 def format_action_list(phrases):
     if not phrases:
         return ""
@@ -649,150 +823,233 @@ async def chat_endpoint(request: ChatRequest):
     # Name handling – first stage: capture spoken name and ask for confirmation.
     if waiting_for_name.get(session_id):
         waiting_for_name.pop(session_id)
-        tentative = message.strip() or "Guest Customer"
-        name_confirmation_pending[session_id] = tentative
-        return {"response": f'I heard your name as "{tentative}". Is that correct?', "actions": []}
 
+        raw_name = message.strip()
+
+        # Extract name from common voice phrases
+        name_match = re.search(r"(?:my name is|i am|i'm|this is|name is)\s+(.+)",raw_name,re.IGNORECASE )
+        if name_match:
+            tentative = name_match.group(1).strip()
+        else:
+            tentative = raw_name or "Guest Customer"
+
+        name_confirmation_pending[session_id] = tentative
+        return {
+            "response": f'I heard your name as "{tentative}". Is that correct?',
+            "actions": []
+        }
+    
     if pending_confirmation.get(session_id):
-        # User responded to "Would you like to add anything else?"
-        if message_lower in ["yes", "y", "sure", "yeah"]:
-            # Continue adding items
-            pending_confirmation.pop(session_id)
-            return {"response": "Sure, what would you like to add?", "actions": []}
-        elif message_lower in ["no", "n", "nope"]:
-            # Finished adding, move to name request
-            pending_confirmation.pop(session_id)
+        normalized = re.sub(r"[^a-zA-Z\s]", "", message_lower).strip()
+        words = normalized.split()
+
+        affirmative_words = {
+            "yes", "y", "yeah", "yep", "yup",
+            "sure", "okay", "ok", "haan", "ha"
+        }
+
+        negative_words = {
+            "no", "n", "nope", "nah", "nahi"
+        }
+
+        is_affirmative = (
+            bool(words)
+            and all(word in affirmative_words for word in words)
+        )
+
+        is_negative = (
+            bool(words)
+            and all(word in negative_words for word in words)
+        )
+
+        # User confirms the order
+        if is_affirmative:
+            pending_confirmation.pop(session_id, None)
+
+            # Move to customer-name collection
             waiting_for_name[session_id] = True
-            return {"response": "Great! Before I place your order, may I know your name?", "actions": []}
-        elif message_lower in ["place order", "confirm", "ok", "okay", "proceed"]:
-            # User wants to place order directly, ask for name first
-            pending_confirmation.pop(session_id)
+
+            return {
+                "response": "Great! Before I place your order, may I know your name?",
+                "actions": []
+            }
+
+        # User does not want to confirm yet
+        elif is_negative:
+            pending_confirmation.pop(session_id, None)
+
+            return {
+                "response": "No problem. What would you like to add or change?",
+                "actions": []
+            }
+
+        # Explicit order confirmation
+        elif normalized in ["place order", "confirm", "proceed"]:
+            pending_confirmation.pop(session_id, None)
             waiting_for_name[session_id] = True
-            return {"response": "Before I place your order, may I know your name?", "actions": []}
-        # fall through to fallback if ambiguous
+
+            return {
+                "response": "Before I place your order, may I know your name?",
+                "actions": []
+            }
 
     if name_confirmation_pending.get(session_id):
         tentative = name_confirmation_pending.pop(session_id)
-        if message_lower in ["yes", "y", "correct", "right"]:
-            cust_name = tentative
-            customer_names[session_id] = cust_name
-            return {"response": f"Thank you {cust_name}.\n\nYour order has been confirmed.\nORDER CONFIRMED", "actions": [{"action": "place_order", "customer": cust_name}]}
-        else:
-            return {"response": "Please type your name in the input box.", "actions": []}
+        normalized = re.sub(
+            r"[^a-zA-Z\s]",
+            "",
+            message_lower
+        ).strip()
 
-    # 3. Fallback to AI LLM response
-    ai_reply = get_ai_response(session_id, request.message, cart_str)
-    lower = ai_reply.lower()
+        words = normalized.split()
 
-    actions = []
-    for item, price in MENU.items():
-        if re.search(rf"\b{re.escape(item.lower())}\b", lower):
-            match = re.search(
-                rf"(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+{re.escape(item.lower())}",
-                lower
-            )
-            qty = 1
-            if match:
-                value = match.group(1)
-                if value.isdigit():
-                    qty = int(value)
-                else:
-                    qty = NUMBER_WORDS.get(value, 1)
-            actions.append({
-                "action": "add_quantity",
-                "item": item,
-                "price": price,
-                "quantity": qty
-            })
-
-    if actions:
-        pending_confirmation[session_id] = True
-        return {
-            "response": ai_reply,
-            "actions": actions
+        affirmative_words = {
+            "yes", "y", "yeah", "yep", "yup",
+            "sure", "correct", "right",
+            "okay", "ok", "haan", "ha"
         }
 
-    return {
-        "response": ai_reply,
-        "actions": []
-    }
+        is_affirmative = (
+            bool(words)
+            and all(word in affirmative_words for word in words)
+        )
+
+        if is_affirmative:
+
+            cust_name = tentative
+
+            customer_names[session_id] = cust_name
+
+            return {
+                "response": (
+                    f"Thank you {cust_name}! "
+                    "Your order has been confirmed."
+                ),
+                "actions": [
+                    {
+                        "action": "place_order",
+                        "customer": cust_name
+                    }
+                ]
+            }
+
+        else:
+
+            waiting_for_name[session_id] = True
+
+            return {
+                "response": (
+                    "No problem. "
+                    "Please tell me your name again."
+                ),
+                "actions": []
+            }
 
   
 @app.post("/place_order")
 async def place_order(order: OrderRequest):
-    if not order.items:
-        return JSONResponse(status_code=400, content={"status": "error", "error": "Your basket is empty. Add an item before placing an order."})
+    try:
+        customer_name = order.customer.strip() if order.customer else ""
+        if not customer_name:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "error": "Customer name is required before placing the order."}
+            )
 
-    # Validate items & recalculate server-side totals
-    validated_items = []
-    total = 0
-    for item in order.items:
-        name = item.get("name")
-        if not name or name not in MENU:
-            continue
-        qty = max(1, int(item.get("quantity", 1)))
-        price = MENU[name]
-        subtotal = price * qty
-        total += subtotal
-        validated_items.append({
-            "name": name,
-            "quantity": qty,
-            "price": price
-        })
+        if not order.items:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "error": "Your basket is empty. Add an item before placing an order."}
+            )
 
-    if not validated_items:
-        return JSONResponse(status_code=400, content={"status": "error", "error": "No valid products found in basket."})
+        # Validate items & recalculate server-side totals
+        validated_items = []
+        total = 0
 
-    customer_name = order.customer.strip() if order.customer else "Guest Customer"
+        for item in order.items:
+            name = item.get("name")
+            if not name or name not in MENU:
+                continue
 
-    styles = getSampleStyleSheet()
-    title_style = styles["Title"]
-    title_style.fontName = PDF_FONT_BOLD
-    h2_style = styles["Heading2"]
-    h2_style.fontName = PDF_FONT_NORMAL
+            try:
+                qty = max(1, int(item.get("quantity", 1)))
+            except (TypeError, ValueError):
+                qty = 1
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer)
-    elements = []
-    elements.append(
-        Paragraph("<b>Savoury & Sweet Co.</b>", title_style)
-    )
-    elements.append(
-        Paragraph(f"Customer : {customer_name}", h2_style)
-    )
-    data = [["Item","Qty","Price","Subtotal"]]
-    for item in validated_items:
-        subtotal = item["price"] * item["quantity"]
-        data.append([
-            item["name"],
-            str(item["quantity"]),
-            f"₹{item['price']}",
-            f"₹{subtotal}"
-        ])
-    data.append(["","","Total",f"₹{total}"])
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), PDF_FONT_NORMAL),
-        ("FONTNAME", (0, 0), (-1, 0), PDF_FONT_BOLD),
-        ("FONTNAME", (-2, -1), (-1, -1), PDF_FONT_BOLD),
-        ("BACKGROUND",(0,0),(-1,0),colors.grey),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.whitesmoke),
-        ("GRID",(0,0),(-1,-1),1,colors.black),
-        ("BACKGROUND",(0,1),(-1,-2),colors.beige),
-        ("BACKGROUND",(-2,-1),(-1,-1),colors.lightgrey),
-        ("ALIGN",(0,0),(-1,-1),"CENTER")
-    ]))
-    elements.append(table)
-    doc.build(elements)
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    safe_name = "".join(
-        c for c in customer_name if c.isalnum()
-    ) or "Guest"
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = f"Invoice_{safe_name}_{timestamp}.pdf"
-    if supabase is None:
-    raise HTTPException(status_code=500, detail="Supabase configuration missing: cannot store invoice or record order.")
+            price = MENU[name]
+            subtotal = price * qty
+            total += subtotal
+
+            validated_items.append({
+                "name": name,
+                "quantity": qty,
+                "price": price
+            })
+
+        if not validated_items:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "error": "No valid products found in basket."}
+            )
+
+        styles = getSampleStyleSheet()
+        title_style = styles["Title"]
+        title_style.fontName = PDF_FONT_BOLD
+        h2_style = styles["Heading2"]
+        h2_style.fontName = PDF_FONT_NORMAL
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer)
+        elements = []
+
+        elements.append(
+            Paragraph("<b>Savoury & Sweet Co.</b>", title_style)
+        )
+        elements.append(
+            Paragraph(f"Customer : {customer_name}", h2_style)
+        )
+
+        data = [["Item", "Qty", "Price", "Subtotal"]]
+        for item in validated_items:
+            subtotal = item["price"] * item["quantity"]
+            data.append([
+                item["name"],
+                str(item["quantity"]),
+                f"₹{item['price']}",
+                f"₹{subtotal}"
+            ])
+
+        data.append(["", "", "Total", f"₹{total}"])
+
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), PDF_FONT_NORMAL),
+            ("FONTNAME", (0, 0), (-1, 0), PDF_FONT_BOLD),
+            ("FONTNAME", (-2, -1), (-1, -1), PDF_FONT_BOLD),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+            ("GRID", (0, 0), (-1, -1), 1, colors.black),
+            ("BACKGROUND", (0, 1), (-1, -2), colors.beige),
+            ("BACKGROUND", (-2, -1), (-1, -1), colors.lightgrey),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER")
+        ]))
+
+        elements.append(table)
+        doc.build(elements)
+
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+
+        safe_name = "".join(c for c in customer_name if c.isalnum()) or "Customer"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"Invoice_{safe_name}_{timestamp}.pdf"
+
+        if supabase is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase configuration missing: cannot store invoice or record order."
+            )
+
         print("Uploading PDF...")
         upload = supabase.storage.from_("SweetInvoice").upload(
             path=file_name,
@@ -803,6 +1060,7 @@ async def place_order(order: OrderRequest):
             }
         )
         print("Upload successful")
+
         invoice_url = supabase.storage.from_("SweetInvoice").get_public_url(file_name)
 
         response = supabase.table("orders").insert({
@@ -813,16 +1071,23 @@ async def place_order(order: OrderRequest):
         }).execute()
 
         print("Inserted Successfully")
+
         return {
             "status": "success",
             "invoice_url": invoice_url
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print("="*60)
+        print("=" * 60)
         traceback.print_exc()
-        print("="*60)
-        return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
+        print("=" * 60)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "error": str(e)}
+        )
+
 
 # ════════════════════════════════════════════════════════════════════
 #  WHISPER TRANSCRIPTION (server-side, high-accuracy mode)
@@ -851,8 +1116,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
         transcript = client_oai.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
-            language="hi",          # Hint: Indian English / Hindi mix
-            prompt="This is a bakery ordering conversation in Indian English.",
+            language="en",          # Hint: Indian English / Hindi mix
+            prompt="This is a bakery ordering conversation in Indian English."
+                    "Recognize bakery product names such as Black Forest Cake, "
+                    "Red Velvet Cake, Aloo Tikki, Samosa, Alfredo Spaghetti, "
+                    "Chocolate Cake, Chocolate Cupcake, Cold Coffee and Mango Shake. "
+                    "Preserve customer names accurately.",
         )
         return JSONResponse(content={"transcript": transcript.text})
     except Exception as e:

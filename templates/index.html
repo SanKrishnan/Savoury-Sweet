@@ -806,36 +806,132 @@ let mediaRecorder     = null;
 let audioChunks       = [];
 
 // ── Browser STT path ────────────────────────────────────
+// after 4 seconds of silence.
+
+let browserRecognition = null;
+let speechBuffer = "";
+let silenceTimer = null;
+let browserSTTStopping = false;
+
 function startBrowserSTT() {
+
     if (!SpeechRecognitionAPI) {
-        appendMessage('Your browser does not support speech recognition. Please type your message.', false);
+        appendMessage(
+            'Your browser does not support speech recognition. Please type your message.',
+            false
+        );
         return;
     }
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous    = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 3;
-    recognition.lang = accentSelect.value;
 
-    recognition.onstart = () => {
+    // Avoid creating multiple recognition instances
+    if (browserRecognition) {
+        try {
+            browserRecognition.stop();
+        } catch (e) {}
+    }
+
+    browserRecognition = new SpeechRecognitionAPI();
+
+    // Keep listening so the user can speak multiple items.
+    browserRecognition.continuous = true;
+    browserRecognition.interimResults = false;
+    browserRecognition.maxAlternatives = 3;
+    browserRecognition.lang = accentSelect.value;
+
+    browserSTTStopping = false;
+
+    browserRecognition.onstart = () => {
         isRecording = true;
         micBtn.classList.add('recording');
     };
-    recognition.onresult = (event) => {
-        // Use the best alternative
-        const transcript = event.results[0][0].transcript;
-        messageInput.value = transcript;
-        sendMessage(transcript);
+
+    browserRecognition.onresult = (event) => {
+
+        let newText = "";
+
+        // Collect all new final speech results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+                newText += event.results[i][0].transcript + " ";
+            }
+        }
+
+        newText = newText.trim();
+
+        if (!newText) return;
+
+        // Add this speech to the current buffer
+        speechBuffer += (speechBuffer ? " " : "") + newText;
+
+        // Show everything currently collected
+        messageInput.value = speechBuffer;
+
+        console.log("Speech buffer:", speechBuffer);
+
+        // Restart the 4-second silence timer
+        clearTimeout(silenceTimer);
+
+        silenceTimer = setTimeout(() => {
+            const finalMessage = speechBuffer.trim();
+            if (!finalMessage) return;
+            console.log(
+                "3 seconds of silence. Sending:",
+                finalMessage
+            );
+            browserSTTStopping = true;
+            isRecording = false;
+            try {
+                browserRecognition.stop();
+            } catch (e) {}
+            speechBuffer = "";
+            messageInput.value = "";
+            sendMessage(finalMessage);
+
+        }, 3000);
     };
-    recognition.onerror = () => {
+
+    browserRecognition.onerror = (event) => {
+
+        console.log("Browser STT error:", event.error);
+
+        if (
+            event.error !== "no-speech" &&
+            event.error !== "aborted"
+        ) {
+            appendMessage(
+                "Speech recognition encountered an error. Please try again.",
+                false
+            );
+        }
+    };
+
+    browserRecognition.onend = () => {
+
+        if (browserSTTStopping) {
+            isRecording = false;
+            micBtn.classList.remove('recording');
+            return;
+        }
+
+        if (speechBuffer.trim()) {
+            try {
+                browserRecognition.start();
+            } catch (e) {
+                console.log("Could not restart recognition:", e);
+            }
+        } else {
+            isRecording = false;
+            micBtn.classList.remove('recording');
+        }
+    };
+
+    try {
+        browserRecognition.start();
+    } catch (e) {
+        console.log("Could not start browser STT:", e);
         isRecording = false;
         micBtn.classList.remove('recording');
-    };
-    recognition.onend = () => {
-        isRecording = false;
-        micBtn.classList.remove('recording');
-    };
-    recognition.start();
+    }
 }
 
 // ── Whisper STT path (server-side, high accuracy) ───────
