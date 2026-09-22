@@ -770,9 +770,18 @@ toggleTrack.style.background = '#10b981';
 // ════════════════════════════════════════════════════════
 // SPEECH SYNTHESIS (Text-to-Speech)
 // ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+// SPEECH SYNTHESIS (Text-to-Speech)
+// ════════════════════════════════════════════════════════
 function speak(text) {
-    if (!voiceToggle.checked) return;
+    console.log("[TTS] enabled:", voiceToggle ? voiceToggle.checked : true);
+    if (voiceToggle && !voiceToggle.checked) return;
     const synth = window.speechSynthesis;
+    if (!synth) {
+        console.error("[TTS] SpeechSynthesis API not supported in this browser");
+        return;
+    }
+    console.log("[TTS] generating playback for:", text);
     if (synth.speaking) synth.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     const voices = synth.getVoices();
@@ -784,18 +793,69 @@ function speak(text) {
     );
     if (preferred) utt.voice = preferred;
     utt.rate = 0.95;
+
+    utt.onstart = () => console.log("[TTS] playback started");
+    utt.onend = () => console.log("[TTS] playback ended");
+    utt.onerror = (e) => console.error("[TTS] playback error:", e);
+
     synth.speak(utt);
 }
 // Populate voices once loaded
-if (window.speechSynthesis.onvoiceschanged !== undefined) {
+if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {
     window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+
+// ════════════════════════════════════════════════════════
+// MICROPHONE DIAGNOSTICS & PERMISSIONS
+// ════════════════════════════════════════════════════════
+async function checkMicrophonePermissionsAndDevices() {
+    console.log("[MIC] Checking microphone permissions and audio input devices...");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("[MIC] mediaDevices.getUserMedia is not supported in this browser environment.");
+        return null;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("[MIC] Microphone access granted (permission OK)");
+        
+        const audioTracks = stream.getAudioTracks();
+        console.log("[MIC] Active audio tracks count:", audioTracks.length);
+        audioTracks.forEach((track, idx) => {
+            console.log(`[MIC] Track ${idx + 1}: label="${track.label || 'Default Mic'}", enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+        });
+
+        if (navigator.mediaDevices.enumerateDevices) {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+            console.log("[MIC] Available audio input devices count:", audioInputs.length);
+            audioInputs.forEach((d, idx) => {
+                console.log(`[MIC] Available Input ${idx + 1}: label="${d.label || 'Unknown Microphone'}", deviceId="${d.deviceId ? d.deviceId.slice(0, 8) + '...' : 'default'}"`);
+            });
+        }
+        return stream;
+    } catch (error) {
+        console.error(`[MIC] Microphone access failed: ${error.name} - ${error.message}`);
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+            console.error("[MIC] Diagnosis: User or browser denied microphone permissions.");
+        } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+            console.error("[MIC] Diagnosis: No audio capture devices found on system.");
+        } else if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+            console.error("[MIC] Diagnosis: Microphone device is in use by another process or unreadable.");
+        } else if (error.name === "OverconstrainedError") {
+            console.error("[MIC] Diagnosis: Audio constraints cannot be met by available microphone.");
+        } else if (error.name === "SecurityError") {
+            console.error("[MIC] Diagnosis: Media recording blocked by security policy (non-HTTPS or iframe).");
+        }
+        return null;
+    }
 }
 
 
 // ════════════════════════════════════════════════════════
 // SPEECH RECOGNITION (Browser STT + Whisper fallback)
 // ════════════════════════════════════════════════════════
-const accentSelect = document.getElementById('accent-select') || { value: 'en-IN' };
+const accentSelect  = document.getElementById('accent-select') || { value: 'en-IN' };
 const sttModeSelect = document.getElementById('stt-mode') || { value: 'browser' };
 const micBtn        = document.getElementById('mic-btn');
 const messageInput  = document.getElementById('message-input');
@@ -806,16 +866,14 @@ let mediaRecorder     = null;
 let audioChunks       = [];
 
 // ── Browser STT path ────────────────────────────────────
-// after 4 seconds of silence.
-
 let browserRecognition = null;
 let speechBuffer = "";
 let silenceTimer = null;
 let browserSTTStopping = false;
 
 function startBrowserSTT() {
-
     if (!SpeechRecognitionAPI) {
+        console.error("[BROWSER-STT] SpeechRecognition API not supported on this browser.");
         appendMessage(
             'Your browser does not support speech recognition. Please type your message.',
             false
@@ -823,7 +881,6 @@ function startBrowserSTT() {
         return;
     }
 
-    // Avoid creating multiple recognition instances
     if (browserRecognition) {
         try {
             browserRecognition.stop();
@@ -831,25 +888,26 @@ function startBrowserSTT() {
     }
 
     browserRecognition = new SpeechRecognitionAPI();
-
-    // Keep listening so the user can speak multiple items.
     browserRecognition.continuous = true;
     browserRecognition.interimResults = false;
     browserRecognition.maxAlternatives = 3;
-    browserRecognition.lang = accentSelect.value;
+
+    // Set locale BEFORE recognition.start()
+    const selectedLang = (accentSelect && accentSelect.value) ? accentSelect.value : 'en-IN';
+    browserRecognition.lang = selectedLang;
+    console.log("[BROWSER-STT] Language:", browserRecognition.lang);
 
     browserSTTStopping = false;
 
     browserRecognition.onstart = () => {
         isRecording = true;
         micBtn.classList.add('recording');
+        console.log("[BROWSER-STT] Recognition started");
     };
 
     browserRecognition.onresult = (event) => {
-
+        console.log("[BROWSER-STT] Result received:", event.results);
         let newText = "";
-
-        // Collect all new final speech results
         for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
                 newText += event.results[i][0].transcript + " ";
@@ -857,27 +915,17 @@ function startBrowserSTT() {
         }
 
         newText = newText.trim();
-
         if (!newText) return;
 
-        // Add this speech to the current buffer
         speechBuffer += (speechBuffer ? " " : "") + newText;
-
-        // Show everything currently collected
         messageInput.value = speechBuffer;
+        console.log("[BROWSER-STT] Speech buffer:", speechBuffer);
 
-        console.log("Speech buffer:", speechBuffer);
-
-        // Restart the 4-second silence timer
         clearTimeout(silenceTimer);
-
         silenceTimer = setTimeout(() => {
             const finalMessage = speechBuffer.trim();
             if (!finalMessage) return;
-            console.log(
-                "3 seconds of silence. Sending:",
-                finalMessage
-            );
+            console.log("[BROWSER-STT] 2 seconds of silence. Sending message:", finalMessage);
             browserSTTStopping = true;
             isRecording = false;
             try {
@@ -886,27 +934,22 @@ function startBrowserSTT() {
             speechBuffer = "";
             messageInput.value = "";
             sendMessage(finalMessage);
-
-        }, 3000);
+        }, 2000);
     };
 
     browserRecognition.onerror = (event) => {
-
-        console.log("Browser STT error:", event.error);
-
-        if (
-            event.error !== "no-speech" &&
-            event.error !== "aborted"
-        ) {
-            appendMessage(
-                "Speech recognition encountered an error. Please try again.",
-                false
-            );
+        console.error("[BROWSER-STT] Recognition error:", event.error, event.message || "");
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            appendMessage("Microphone permission was denied for Browser STT.", false);
+        } else if (event.error === "audio-capture") {
+            appendMessage("No microphone captured audio. Check device selection.", false);
+        } else if (event.error !== "no-speech" && event.error !== "aborted") {
+            appendMessage("Speech recognition encountered an error: " + event.error, false);
         }
     };
 
     browserRecognition.onend = () => {
-
+        console.log("[BROWSER-STT] Recognition ended");
         if (browserSTTStopping) {
             isRecording = false;
             micBtn.classList.remove('recording');
@@ -917,7 +960,7 @@ function startBrowserSTT() {
             try {
                 browserRecognition.start();
             } catch (e) {
-                console.log("Could not restart recognition:", e);
+                console.log("[BROWSER-STT] Could not restart recognition:", e);
             }
         } else {
             isRecording = false;
@@ -925,56 +968,116 @@ function startBrowserSTT() {
         }
     };
 
-    try {
-        browserRecognition.start();
-    } catch (e) {
-        console.log("Could not start browser STT:", e);
-        isRecording = false;
-        micBtn.classList.remove('recording');
-    }
+    checkMicrophonePermissionsAndDevices().then(stream => {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+        }
+        try {
+            browserRecognition.start();
+        } catch (e) {
+            console.error("[BROWSER-STT] Could not start browser STT:", e);
+            isRecording = false;
+            micBtn.classList.remove('recording');
+        }
+    });
 }
 
 // ── Whisper STT path (server-side, high accuracy) ───────
 async function startWhisperSTT() {
-    // If no mediaDevices support, silently fall back to browser STT
+    console.log("[WHISPER] Handler started");
     if (!navigator.mediaDevices || !window.MediaRecorder) {
+        console.warn("[WHISPER] MediaRecorder API not supported. Falling back to Browser STT.");
         sttModeSelect.value = 'browser';
         startBrowserSTT();
         return;
     }
+
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await checkMicrophonePermissionsAndDevices();
+        if (!stream) {
+            console.error("[WHISPER] Microphone stream acquisition failed.");
+            sttModeSelect.value = 'browser';
+            startBrowserSTT();
+            return;
+        }
+
         audioChunks = [];
-        mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg' });
-        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+
+        // Determine best supported MIME type dynamically across browsers/mobile
+        let mimeType = 'audio/webm';
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+            mimeType = 'audio/ogg';
+        } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+            mimeType = 'audio/wav';
+        }
+        console.log("[WHISPER] Selected MediaRecorder MIME type:", mimeType);
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+        mediaRecorder.ondataavailable = e => {
+            if (e.data && e.data.size > 0) {
+                audioChunks.push(e.data);
+            }
+        };
+
         mediaRecorder.onstop = async () => {
+            console.log("[WHISPER] recording stopped");
             stream.getTracks().forEach(t => t.stop());
-            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+            const actualMime = mediaRecorder.mimeType || mimeType;
+            const blob = new Blob(audioChunks, { type: actualMime });
+            console.log("[WHISPER] blob size=", blob.size);
+            console.log("[WHISPER] mime=", actualMime);
+
+            if (blob.size === 0) {
+                console.error("[WHISPER] Recorded audio blob is empty (0 bytes)");
+                appendMessage("Recorded audio was empty. Please speak clearly into your microphone.", false);
+                return;
+            }
+
+            const ext = actualMime.includes('mp4') ? 'mp4' : (actualMime.includes('ogg') ? 'ogg' : (actualMime.includes('wav') ? 'wav' : 'webm'));
+            const filename = `audio.${ext}`;
+
             const formData = new FormData();
-            formData.append('file', blob, 'audio.webm');
+            formData.append('file', blob, filename);
+
+            console.log("[WHISPER] request sent to /transcribe...");
             try {
-                const res  = await fetch('/transcribe', { method: 'POST', body: formData });
+                const res = await fetch('/transcribe', { method: 'POST', body: formData });
+                console.log("[WHISPER] response status=", res.status);
                 const data = await res.json();
-                if (data.transcript) {
+
+                if (res.ok && data.transcript) {
+                    console.log("[WHISPER] transcript=", data.transcript);
                     messageInput.value = data.transcript;
                     sendMessage(data.transcript);
                 } else {
-                    // Whisper unavailable (no API key) – silently fall back, update dropdown
+                    const errDetail = data.error || data.detail || `Server returned status ${res.status}`;
+                    console.error("[WHISPER] error=", errDetail);
+                    appendMessage(`Whisper unavailable (${errDetail}). Falling back to Browser STT.`, false);
                     sttModeSelect.value = 'browser';
-                    micBtn.title = 'Browser speech recognition (Whisper unavailable – set OPENAI_API_KEY in .env)';
                     startBrowserSTT();
                 }
             } catch (err) {
-                // Network error – silently fall back
+                console.error("[WHISPER] Network error during Whisper transcription:", err);
+                appendMessage("Network error during Whisper transcription. Falling back to Browser STT.", false);
                 sttModeSelect.value = 'browser';
                 startBrowserSTT();
             }
         };
+
         mediaRecorder.start();
         isRecording = true;
         micBtn.classList.add('recording');
+        console.log("[WHISPER] recording started");
     } catch (err) {
-        // Mic denied – let browser STT handle the permission prompt instead
+        console.error("[WHISPER] Exception in startWhisperSTT:", err);
         sttModeSelect.value = 'browser';
         startBrowserSTT();
     }
@@ -993,9 +1096,11 @@ micBtn.addEventListener('click', () => {
         if (sttModeSelect.value === 'whisper') {
             stopWhisperSTT();
         } else {
-            // Browser STT stops on its own via onend
             isRecording = false;
             micBtn.classList.remove('recording');
+            if (browserRecognition) {
+                try { browserRecognition.stop(); } catch(e){}
+            }
         }
         return;
     }
@@ -1033,12 +1138,152 @@ function appendMessage(text, isUser = false) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
+let confirmationRequestPending = false;
+
+function isOrderConfirmationIntent(text) {
+    if (!text) return false;
+    const clean = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    
+    // Explicit keywords / phrases that indicate user wants to place/confirm order
+    const phrases = [
+        "yes", "yep", "yup", "yeah", "sure", "ok", "okay",
+        "place order", "place my order", "place it", "confirm", "proceed",
+        "thats all", "that is all", "no more", "no thats all", "no that is all",
+        "no place it", "no place my order", "no place order", "done",
+        "no just place order", "no just place it", "ready", "no thanks", "no thank you"
+    ];
+    
+    if (phrases.includes(clean)) return true;
+    if (clean.includes("place order") || clean.includes("place my order") || clean.includes("place it") || clean.includes("thats all") || clean.includes("that is all")) {
+        return true;
+    }
+    return false;
+}
+
+function handleActions(actions) {
+    if (!actions) return;
+    actions.forEach(action => {
+        if (action.action === "add" || action.action === "add_quantity") {
+            const existing = cart.find(i => i.name === action.item);
+            if (existing) {
+                existing.quantity += action.quantity;
+            } else {
+                cart.push({
+                    name: action.item,
+                    price: action.price,
+                    quantity: action.quantity
+                });
+            }
+            renderCart();
+        }
+        if (action.action === "set_quantity") {
+            const existing = cart.find(i => i.name === action.item);
+            if (existing) {
+                if (action.quantity <= 0) {
+                    removeItem(action.item);
+                } else {
+                    existing.quantity = action.quantity;
+                    renderCart();
+                }
+            } else if (action.quantity > 0) {
+                cart.push({
+                    name: action.item,
+                    price: action.price,
+                    quantity: action.quantity
+                });
+                renderCart();
+            }
+        }
+        if (action.action === "reduce_quantity") {
+            const existing = cart.find(i => i.name === action.item);
+            if (existing) {
+                existing.quantity -= action.quantity;
+                if (existing.quantity <= 0) {
+                    removeItem(action.item);
+                } else {
+                    renderCart();
+                }
+            }
+        }
+        if (action.action === "remove" || action.action === "remove_item") {
+            removeItem(action.item);
+        }
+        if (action.action === "clear_cart") {
+            clearCart();
+        }
+        if (action.action === "replace_item") {
+            cart = cart.filter(i => i.name !== action.old_item);
+            const existing = cart.find(i => i.name === action.new_item);
+            if (existing) {
+                existing.quantity = action.quantity;
+            } else {
+                cart.push({
+                    name: action.new_item,
+                    price: action.price,
+                    quantity: action.quantity
+                });
+            }
+            renderCart();
+        }
+        if (action.action === "place_order") {
+            placeOrder(action.customer);
+        }
+        if (action.action === "keep_only") {
+            cart = action.new_cart;
+            renderCart();
+        }
+    });
+}
+
+async function sendOrderForConfirmation() {
+    if (confirmationRequestPending) return;
+    if (!cart || cart.length === 0) return;
+
+    confirmationRequestPending = true;
+    console.log("[ORDER-FLOW] User confirmed order readiness. Waiting 1500 ms before sending confirmation request...");
+
+    try {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log("[ORDER-FLOW] Sending confirmation request to /chat...");
+
+        typingIndicator.classList.remove("hidden");
+        const res = await fetch("/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: "place order",
+                cart: cart
+            })
+        });
+        const data = await res.json();
+        typingIndicator.classList.add("hidden");
+
+        if (data.actions) {
+            handleActions(data.actions);
+        }
+        if (data.response) {
+            appendMessage(data.response);
+            speak(data.response);
+        }
+    } catch (error) {
+        typingIndicator.classList.add("hidden");
+        console.error("[ORDER-FLOW] Confirmation request failed:", error);
+    } finally {
+        confirmationRequestPending = false;
+    }
+}
+
 async function sendMessage(text) {
     if (!text.trim()) return;
     appendMessage(text, true);
     messageInput.value = "";
     typingIndicator.classList.remove("hidden");
     chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    const userWantsConfirmation = isOrderConfirmationIntent(text);
+
     try {
         const res = await fetch("/chat", {
             method: "POST",
@@ -1052,81 +1297,20 @@ async function sendMessage(text) {
         });
         const data = await res.json();
         typingIndicator.classList.add("hidden");
+
         if (data.actions) {
-            data.actions.forEach(action => {
-                if (action.action === "add" || action.action === "add_quantity") {
-                    const existing = cart.find(i => i.name === action.item);
-                    if (existing) {
-                        existing.quantity += action.quantity;
-                    } else {
-                        cart.push({
-                            name: action.item,
-                            price: action.price,
-                            quantity: action.quantity
-                        });
-                    }
-                    renderCart();
-                }
-                if (action.action === "set_quantity") {
-                    const existing = cart.find(i => i.name === action.item);
-                    if (existing) {
-                        if (action.quantity <= 0) {
-                            removeItem(action.item);
-                        } else {
-                            existing.quantity = action.quantity;
-                            renderCart();
-                        }
-                    } else if (action.quantity > 0) {
-                        cart.push({
-                            name: action.item,
-                            price: action.price,
-                            quantity: action.quantity
-                        });
-                        renderCart();
-                    }
-                }
-                if (action.action === "reduce_quantity") {
-                    const existing = cart.find(i => i.name === action.item);
-                    if (existing) {
-                        existing.quantity -= action.quantity;
-                        if (existing.quantity <= 0) {
-                            removeItem(action.item);
-                        } else {
-                            renderCart();
-                        }
-                    }
-                }
-                if (action.action === "remove" || action.action === "remove_item") {
-                    removeItem(action.item);
-                }
-                if (action.action === "clear_cart") {
-                    clearCart();
-                }
-                if (action.action === "replace_item") {
-                    cart = cart.filter(i => i.name !== action.old_item);
-                    const existing = cart.find(i => i.name === action.new_item);
-                    if (existing) {
-                        existing.quantity = action.quantity;
-                    } else {
-                        cart.push({
-                            name: action.new_item,
-                            price: action.price,
-                            quantity: action.quantity
-                        });
-                    }
-                    renderCart();
-                }
-                if (action.action === "place_order") {
-                    placeOrder(action.customer);
-                }
-                if (action.action === "keep_only") {
-                    cart = action.new_cart;
-                    renderCart();
-                }
-            });
+            handleActions(data.actions);
         }
-        appendMessage(data.response);
-        speak(data.response);
+
+        if (data.response) {
+            appendMessage(data.response);
+            speak(data.response);
+        }
+
+        // ONLY trigger sendOrderForConfirmation() after the user explicitly responds that they want to place the order
+        if (userWantsConfirmation && cart.length > 0 && !data.actions?.some(a => a.action === "place_order")) {
+            sendOrderForConfirmation();
+        }
     } catch (err) {
         typingIndicator.classList.add("hidden");
         appendMessage(

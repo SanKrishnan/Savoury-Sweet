@@ -84,12 +84,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 AI_PROVIDER = os.getenv("AI_PROVIDER", "groq").lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_MODEL = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
-# Fallback if deprecated model is set
-if GROQ_MODEL in ["llama-3.3-70b-versatile", "llama3-70b"]:
-    print(f"[WARN] Deprecated Groq model '{GROQ_MODEL}' configured. Falling back to {DEFAULT_GROQ_MODEL}.")
-    GROQ_MODEL = DEFAULT_GROQ_MODEL
 
 # ── System Prompt ────────────────────────────────────────────────────
 SYSTEM_PROMPT = """
@@ -819,6 +815,15 @@ async def chat_endpoint(request: ChatRequest):
             "actions": intent_actions
         }
 
+    # Direct confirmation / place order trigger check
+    if (message_lower in ["place order", "confirm", "proceed", "please confirm this order."] or "place order" in message_lower) and request.cart:
+        pending_confirmation.pop(session_id, None)
+        waiting_for_name[session_id] = True
+        return {
+            "response": "Great! Before I place your order, may I know your name?",
+            "actions": []
+        }
+
     # 2. No cart-modify intent — now check the confirmation gate.
     # Name handling – first stage: capture spoken name and ask for confirmation.
     if waiting_for_name.get(session_id):
@@ -1096,38 +1101,97 @@ async def place_order(order: OrderRequest):
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """
-    Accepts an audio blob (webm/ogg/wav) and returns the transcription.
-    Uses OpenAI Whisper if OPENAI_API_KEY is set, otherwise returns an error
-    so the client can fall back to the browser SpeechRecognition.
+    Accepts an audio blob (webm/ogg/wav/mp4) and returns the transcription.
+    Supports Groq Whisper (if GROQ_API_KEY is set) or OpenAI Whisper (if OPENAI_API_KEY is set).
     """
-    if not OPENAI_API_KEY:
-        return JSONResponse(
-            content={"error": "OpenAI API key not configured. Using browser speech recognition."},
-            status_code=503,
-        )
+    print("[WHISPER] Request received")
+    print(f"[WHISPER] Filename: {file.filename}, Content type: {file.content_type}")
 
     try:
-        import openai
-        client_oai = openai.OpenAI(api_key=OPENAI_API_KEY)
         audio_bytes = await file.read()
-        audio_file = io.BytesIO(audio_bytes)
-        audio_file.name = file.filename or "audio.webm"
+        print(f"[WHISPER] File size: {len(audio_bytes)} bytes")
 
-        transcript = client_oai.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            language="en",          # Hint: Indian English / Hindi mix
-            prompt="This is a bakery ordering conversation in Indian English."
-                    "Recognize bakery product names such as Black Forest Cake, "
-                    "Red Velvet Cake, Aloo Tikki, Samosa, Alfredo Spaghetti, "
-                    "Chocolate Cake, Chocolate Cupcake, Cold Coffee and Mango Shake. "
-                    "Preserve customer names accurately.",
+        if len(audio_bytes) == 0:
+            print("[WHISPER] Error: Received empty audio file")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Audio file is empty"}
+            )
+
+        prompt_text = (
+            "This is an Indian English bakery ordering conversation. "
+            "Transcribe exactly what the customer says. "
+            "Common menu items include: Alfredo Spaghetti, Aloo Tikki, "
+            "Black Forest Cake, Blueberry Muffin, Butter Croissant, "
+            "Butterscotch Cake, Cheese Sandwich, Cheesy Garlic Bread, "
+            "Chocolate Cake, Chocolate Cupcake, Cold Coffee, "
+            "Mango Shake, Red Velvet Cake and Samosa. "
+            "Preserve quantities, customer names and item names accurately. "
+            "Do not paraphrase or summarize the customer's speech."
         )
-        return JSONResponse(content={"transcript": transcript.text})
+
+        # 1. Try Groq Whisper API if GROQ_API_KEY is configured
+        if GROQ_API_KEY:
+            try:
+                print("[WHISPER] Attempting transcription via Groq API...")
+                client_groq = Groq(api_key=GROQ_API_KEY)
+                filename = file.filename or "audio.webm"
+                transcription = client_groq.audio.transcriptions.create(
+                    file=(filename, audio_bytes),
+                    model="whisper-large-v3-turbo",
+                    response_format="json",
+                    language="en",
+                    prompt=prompt_text
+                )
+                text = transcription.text if hasattr(transcription, 'text') else str(transcription)
+                print(f"[WHISPER] Groq transcription success: {text}")
+                return JSONResponse(content={"transcript": text})
+            except Exception as e:
+                print(f"[WHISPER] Groq Whisper error: {e}")
+                traceback.print_exc()
+                if not OPENAI_API_KEY:
+                    return JSONResponse(
+                        content={"error": f"Groq Whisper error: {str(e)}"},
+                        status_code=500
+                    )
+
+        # 2. Try OpenAI Whisper API if OPENAI_API_KEY is configured
+        if OPENAI_API_KEY:
+            try:
+                print("[WHISPER] Attempting transcription via OpenAI API...")
+                import openai
+                client_oai = openai.OpenAI(api_key=OPENAI_API_KEY)
+                filename = file.filename or "audio.webm"
+                transcription = client_oai.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=(filename, audio_bytes),
+                    language="en",
+                    prompt=prompt_text
+                )
+                text = transcription.text
+                print(f"[WHISPER] OpenAI transcription success: {text}")
+                return JSONResponse(content={"transcript": text})
+            except Exception as e:
+                print(f"[WHISPER] OpenAI Whisper error: {e}")
+                traceback.print_exc()
+                return JSONResponse(
+                    content={"error": f"OpenAI Whisper error: {str(e)}"},
+                    status_code=500
+                )
+
+        print("[WHISPER] Error: Neither GROQ_API_KEY nor OPENAI_API_KEY configured")
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Whisper API key not configured (neither GROQ_API_KEY nor OPENAI_API_KEY found in environment)."}
+        )
     except Exception as e:
-        print(f"Whisper error: {e}")
-        # Return an 'error' key (not a 500) so the browser JS silently falls back to Web Speech API
-        return JSONResponse(content={"error": "Whisper unavailable", "detail": str(e)}, status_code=200)
+        print(f"[WHISPER] Unexpected endpoint error: {e}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Server transcription error: {str(e)}"}
+        )
+
 
 # ════════════════════════════════════════════════════════════════════
 #  ANALYTICS DASHBOARD ENDPOINTS
