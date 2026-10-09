@@ -865,143 +865,279 @@ let isRecording       = false;
 let mediaRecorder     = null;
 let audioChunks       = [];
 
+// ════════════════════════════════════════════════════════
+// VOICE TURN STATE MACHINE
+// IDLE → RECORDING → FINAL TRANSCRIPT → SHOW → WAIT 300ms
+// → SUBMITTING → WAIT /chat → RESPONSE COMPLETE → IDLE
+// Queues subsequent turns if a /chat is already in flight.
+// ════════════════════════════════════════════════════════
+let voiceTurnSeq = 0;
+let activeVoiceTurnId = null;       // turn currently recording / pending 300ms timer
+let pendingTimerTurnId = null;      // turnId owned by the active 300ms timer
+let pendingAutoSubmitTimer = null;
+let chatInFlight = false;           // true while a /chat request is outstanding
+let voiceTurnQueue = [];            // [{ turnId, transcript }] waiting for chatInFlight to clear
+const committedTurnIds = new Set(); // turns already submitted (prevent double-send)
+
+function nextVoiceTurnId() {
+    voiceTurnSeq += 1;
+    return voiceTurnSeq;
+}
+
+function cancelPendingTimer(reason) {
+    if (pendingAutoSubmitTimer !== null) {
+        clearTimeout(pendingAutoSubmitTimer);
+        pendingAutoSubmitTimer = null;
+        const cancelledId = pendingTimerTurnId;
+        pendingTimerTurnId = null;
+        console.log("[VOICE] pending timer cancelled", reason || "", "id=" + cancelledId);
+    }
+}
+
+/** Called when a NEW recording starts: invalidate stale timer only. Does NOT cancel in-flight /chat. */
+function beginVoiceRecording() {
+    cancelPendingTimer("new-recording");
+    activeVoiceTurnId = nextVoiceTurnId();
+    // Cancel TTS so it cannot interfere with the next mic capture
+    if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    console.log("[VOICE] TURN START id=" + activeVoiceTurnId);
+    return activeVoiceTurnId;
+}
+
+/**
+ * Final transcript ready → show in input → wait 300ms → commit once.
+ * Editing the input, manual Send, or a new recording before 300ms cancels this turn's timer.
+ */
+function onFinalTranscript(transcript, turnId) {
+    const text = (transcript || "").trim();
+    if (!text) {
+        console.log("[VOICE] empty final transcript id=" + turnId);
+        return;
+    }
+    // Only accept if this is still the active recording turn (not superseded)
+    if (turnId !== activeVoiceTurnId) {
+        console.log("[VOICE] stale final transcript ignored id=" + turnId + " active=" + activeVoiceTurnId);
+        return;
+    }
+    messageInput.value = text;
+    console.log("[VOICE] FINAL TRANSCRIPT id=" + turnId + ' text="' + text + '"');
+
+    cancelPendingTimer("reschedule");
+    pendingTimerTurnId = turnId;
+    console.log("[VOICE] AUTO-SUBMIT SCHEDULED id=" + turnId + " delay=300ms");
+    pendingAutoSubmitTimer = setTimeout(() => {
+        pendingAutoSubmitTimer = null;
+        // Stale timer guard: only commit if this timer still owns the turn
+        if (pendingTimerTurnId !== turnId) {
+            console.log("[VOICE] stale timer ignored id=" + turnId);
+            return;
+        }
+        pendingTimerTurnId = null;
+        // After 300ms the turn is committed — use the text captured at schedule time
+        // (user may have edited; if they edited, the input listener already cancelled)
+        const committed = messageInput.value.trim() || text;
+        console.log("[VOICE] AUTO-SUBMIT COMMITTED id=" + turnId);
+        enqueueOrSubmitVoiceTurn(committed, turnId);
+    }, 300);
+}
+
+/** Cancel the pending 300ms auto-submit for the active turn (edit / manual Send). */
+function cancelAutoSubmit() {
+    cancelPendingTimer("user-cancel");
+}
+
+/**
+ * Enqueue or submit a committed voice turn.
+ * Serialization is owned by sendMessage() (shared chatInFlight for voice + manual).
+ * Never submits the same turnId twice.
+ */
+function enqueueOrSubmitVoiceTurn(transcript, turnId) {
+    const text = (transcript || "").trim();
+    if (!text) return;
+    if (committedTurnIds.has(turnId)) {
+        console.log("[VOICE] turn already committed, skip id=" + turnId);
+        return;
+    }
+    // Always go through submitVoiceTurn; sendMessage serializes if /chat is busy
+    if (chatInFlight) {
+        console.log("[VOICE] queued turn id=" + turnId);
+    }
+    submitVoiceTurn(text, turnId);
+}
+
+async function submitVoiceTurn(transcript, turnId) {
+    if (committedTurnIds.has(turnId)) {
+        console.log("[VOICE] turn already committed, skip id=" + turnId);
+        return;
+    }
+    // Only voice turns that actually enter submitVoiceTurn are marked committed
+    committedTurnIds.add(turnId);
+    console.log("[VOICE] submitting turn id=" + turnId);
+    console.log("[CHAT] REQUEST START id=" + turnId);
+    try {
+        // sendMessage owns chatInFlight for ALL /chat traffic (voice + manual)
+        await sendMessage(transcript, turnId);
+    } finally {
+        console.log("[CHAT] RESPONSE COMPLETE id=" + turnId);
+        console.log("[VOICE] TURN COMPLETE id=" + turnId);
+    }
+}
+
 // ── Browser STT path ────────────────────────────────────
 let browserRecognition = null;
 let speechBuffer = "";
-let silenceTimer = null;
-let browserSTTStopping = false;
+let browserTurnId = null;
 
 function startBrowserSTT() {
     if (!SpeechRecognitionAPI) {
-        console.error("[BROWSER-STT] SpeechRecognition API not supported on this browser.");
+        console.error("[BROWSER-STT] SpeechRecognition API not supported.");
         appendMessage(
-            'Your browser does not support speech recognition. Please type your message.',
+            "Your browser does not support speech recognition. Please type your message.",
             false
         );
         return;
     }
 
+    // New turn: invalidate stale timer only; do NOT cancel in-flight /chat
+    browserTurnId = beginVoiceRecording();
+
+    // Stop any previous recognition instance
     if (browserRecognition) {
         try {
+            browserRecognition.onend = null;
+            browserRecognition.onresult = null;
+            browserRecognition.onerror = null;
             browserRecognition.stop();
         } catch (e) {}
+        browserRecognition = null;
     }
 
+    // Fresh utterance
+    speechBuffer = "";
+    messageInput.value = "";
+
     browserRecognition = new SpeechRecognitionAPI();
-    browserRecognition.continuous = true;
-    browserRecognition.interimResults = false;
-    browserRecognition.maxAlternatives = 3;
 
-    // Set locale BEFORE recognition.start()
-    const selectedLang = (accentSelect && accentSelect.value) ? accentSelect.value : 'en-IN';
-    browserRecognition.lang = selectedLang;
-    console.log("[BROWSER-STT] Language:", browserRecognition.lang);
+    // continuous=false: one utterance, ends on silence.
+    // Interim results display only; final transcript enters the voice-turn pipeline.
+    browserRecognition.continuous = false;
+    browserRecognition.interimResults = true;
+    browserRecognition.maxAlternatives = 1;
 
-    browserSTTStopping = false;
+    browserRecognition.lang =
+        (accentSelect && accentSelect.value)
+            ? accentSelect.value
+            : "en-IN";
+
+    console.log("[VOICE] Browser STT started id=" + browserTurnId + " lang=", browserRecognition.lang);
 
     browserRecognition.onstart = () => {
         isRecording = true;
-        micBtn.classList.add('recording');
-        console.log("[BROWSER-STT] Recognition started");
+        micBtn.classList.add("recording");
+        console.log("[VOICE] microphone started (browser STT) id=" + browserTurnId);
     };
 
     browserRecognition.onresult = (event) => {
-        console.log("[BROWSER-STT] Result received:", event.results);
-        let newText = "";
+        let finalText = speechBuffer;
+        let interimText = "";
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript =
+                event.results[i][0].transcript.trim();
+
+            if (!transcript) continue;
+
             if (event.results[i].isFinal) {
-                newText += event.results[i][0].transcript + " ";
+                finalText += (finalText ? " " : "") + transcript;
+            } else {
+                interimText += (interimText ? " " : "") + transcript;
             }
         }
 
-        newText = newText.trim();
-        if (!newText) return;
+        speechBuffer = finalText;
 
-        speechBuffer += (speechBuffer ? " " : "") + newText;
-        messageInput.value = speechBuffer;
-        console.log("[BROWSER-STT] Speech buffer:", speechBuffer);
+        // Interim + partial final shown in input only — NEVER submit from onresult
+        const displayText =
+            (finalText + (interimText ? " " + interimText : "")).trim();
 
-        clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => {
-            const finalMessage = speechBuffer.trim();
-            if (!finalMessage) return;
-            console.log("[BROWSER-STT] 2 seconds of silence. Sending message:", finalMessage);
-            browserSTTStopping = true;
-            isRecording = false;
-            try {
-                browserRecognition.stop();
-            } catch (e) {}
-            speechBuffer = "";
-            messageInput.value = "";
-            sendMessage(finalMessage);
-        }, 2000);
+        messageInput.value = displayText;
     };
 
     browserRecognition.onerror = (event) => {
-        console.error("[BROWSER-STT] Recognition error:", event.error, event.message || "");
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-            appendMessage("Microphone permission was denied for Browser STT.", false);
-        } else if (event.error === "audio-capture") {
-            appendMessage("No microphone captured audio. Check device selection.", false);
-        } else if (event.error !== "no-speech" && event.error !== "aborted") {
-            appendMessage("Speech recognition encountered an error: " + event.error, false);
+        console.error("[VOICE] Browser STT error id=" + browserTurnId + ":", event.error);
+
+        if (
+            event.error === "not-allowed" ||
+            event.error === "service-not-allowed"
+        ) {
+            appendMessage(
+                "Microphone permission was denied.",
+                false
+            );
+        }
+
+        if (event.error === "audio-capture") {
+            appendMessage(
+                "No microphone was detected.",
+                false
+            );
+        }
+
+        isRecording = false;
+        micBtn.classList.remove("recording");
+        // Error ends this turn's timer if any
+        if (pendingTimerTurnId === browserTurnId) {
+            cancelPendingTimer("stt-error");
         }
     };
 
     browserRecognition.onend = () => {
-        console.log("[BROWSER-STT] Recognition ended");
-        if (browserSTTStopping) {
-            isRecording = false;
-            micBtn.classList.remove('recording');
-            return;
-        }
-
-        if (speechBuffer.trim()) {
-            try {
-                browserRecognition.start();
-            } catch (e) {
-                console.log("[BROWSER-STT] Could not restart recognition:", e);
-            }
-        } else {
-            isRecording = false;
-            micBtn.classList.remove('recording');
+        console.log("[VOICE] Browser STT ended id=" + browserTurnId);
+        isRecording = false;
+        micBtn.classList.remove("recording");
+        // Only the FINAL transcript enters the auto-submit pipeline
+        if (speechBuffer && speechBuffer.trim()) {
+            onFinalTranscript(speechBuffer.trim(), browserTurnId);
         }
     };
 
-    checkMicrophonePermissionsAndDevices().then(stream => {
-        if (stream) {
-            stream.getTracks().forEach(t => t.stop());
-        }
-        try {
-            browserRecognition.start();
-        } catch (e) {
-            console.error("[BROWSER-STT] Could not start browser STT:", e);
-            isRecording = false;
-            micBtn.classList.remove('recording');
-        }
-    });
+    try {
+        // IMPORTANT: Do NOT call getUserMedia() here.
+        // Browser SpeechRecognition handles the microphone itself.
+        browserRecognition.start();
+    } catch (error) {
+        console.error("[VOICE] Could not start Browser STT:", error);
+        isRecording = false;
+        micBtn.classList.remove("recording");
+    }
 }
 
 // ── Whisper STT path (server-side, high accuracy) ───────
+let whisperTurnId = null;
+
 async function startWhisperSTT() {
-    console.log("[WHISPER] Handler started");
+    // New turn: invalidate stale timer only; do NOT cancel in-flight /chat
+    whisperTurnId = beginVoiceRecording();
+    console.log("[VOICE] Whisper STT handler started id=" + whisperTurnId);
+
     if (!navigator.mediaDevices || !window.MediaRecorder) {
-        console.warn("[WHISPER] MediaRecorder API not supported. Falling back to Browser STT.");
-        sttModeSelect.value = 'browser';
-        startBrowserSTT();
+        console.warn("[VOICE] MediaRecorder not supported.");
+        appendMessage("Whisper recording is not supported in this browser. Please select Browser STT or type your message.", false);
         return;
     }
 
     try {
         const stream = await checkMicrophonePermissionsAndDevices();
         if (!stream) {
-            console.error("[WHISPER] Microphone stream acquisition failed.");
-            sttModeSelect.value = 'browser';
-            startBrowserSTT();
+            console.error("[VOICE] Microphone stream acquisition failed.");
+            appendMessage("Could not access microphone. Please allow permission and try again.", false);
             return;
         }
 
         audioChunks = [];
+        const capturedTurnId = whisperTurnId;
 
         // Determine best supported MIME type dynamically across browsers/mobile
         let mimeType = 'audio/webm';
@@ -1016,7 +1152,7 @@ async function startWhisperSTT() {
         } else if (MediaRecorder.isTypeSupported('audio/wav')) {
             mimeType = 'audio/wav';
         }
-        console.log("[WHISPER] Selected MediaRecorder MIME type:", mimeType);
+        console.log("[VOICE] MediaRecorder MIME type:", mimeType);
 
         mediaRecorder = new MediaRecorder(stream, { mimeType });
 
@@ -1027,16 +1163,17 @@ async function startWhisperSTT() {
         };
 
         mediaRecorder.onstop = async () => {
-            console.log("[WHISPER] recording stopped");
+            console.log("[VOICE] recording stopped id=" + capturedTurnId);
             stream.getTracks().forEach(t => t.stop());
+            isRecording = false;
+            micBtn.classList.remove('recording');
 
             const actualMime = mediaRecorder.mimeType || mimeType;
             const blob = new Blob(audioChunks, { type: actualMime });
-            console.log("[WHISPER] blob size=", blob.size);
-            console.log("[WHISPER] mime=", actualMime);
+            console.log("[VOICE] audio blob size:", blob.size);
 
             if (blob.size === 0) {
-                console.error("[WHISPER] Recorded audio blob is empty (0 bytes)");
+                console.error("[VOICE] Recorded audio blob is empty (0 bytes)");
                 appendMessage("Recorded audio was empty. Please speak clearly into your microphone.", false);
                 return;
             }
@@ -1047,39 +1184,37 @@ async function startWhisperSTT() {
             const formData = new FormData();
             formData.append('file', blob, filename);
 
-            console.log("[WHISPER] request sent to /transcribe...");
+            console.log("[VOICE] sending /transcribe id=" + capturedTurnId);
             try {
                 const res = await fetch('/transcribe', { method: 'POST', body: formData });
-                console.log("[WHISPER] response status=", res.status);
+                console.log("[VOICE] /transcribe status=", res.status);
                 const data = await res.json();
 
                 if (res.ok && data.transcript) {
-                    console.log("[WHISPER] transcript=", data.transcript);
+                    // Preserve exact STT transcript; same downstream pipeline as Browser STT
+                    // Do NOT call sendMessage() here — go through onFinalTranscript
                     messageInput.value = data.transcript;
-                    sendMessage(data.transcript);
+                    onFinalTranscript(data.transcript, capturedTurnId);
                 } else {
                     const errDetail = data.error || data.detail || `Server returned status ${res.status}`;
-                    console.error("[WHISPER] error=", errDetail);
-                    appendMessage(`Whisper unavailable (${errDetail}). Falling back to Browser STT.`, false);
-                    sttModeSelect.value = 'browser';
-                    startBrowserSTT();
+                    console.error("[VOICE] Whisper error:", errDetail);
+                    appendMessage(`Whisper unavailable (${errDetail}). You can switch to Browser STT or type your message.`, false);
                 }
             } catch (err) {
-                console.error("[WHISPER] Network error during Whisper transcription:", err);
-                appendMessage("Network error during Whisper transcription. Falling back to Browser STT.", false);
-                sttModeSelect.value = 'browser';
-                startBrowserSTT();
+                console.error("[VOICE] Network error during Whisper transcription:", err);
+                appendMessage("Network error during Whisper transcription. Please try again or switch to Browser STT.", false);
             }
         };
 
         mediaRecorder.start();
         isRecording = true;
         micBtn.classList.add('recording');
-        console.log("[WHISPER] recording started");
+        console.log("[VOICE] recording started (Whisper) id=" + capturedTurnId);
     } catch (err) {
-        console.error("[WHISPER] Exception in startWhisperSTT:", err);
-        sttModeSelect.value = 'browser';
-        startBrowserSTT();
+        console.error("[VOICE] Exception in startWhisperSTT:", err);
+        isRecording = false;
+        micBtn.classList.remove('recording');
+        appendMessage("Could not start Whisper recording. Please try Browser STT or type your message.", false);
     }
 }
 
@@ -1087,8 +1222,7 @@ function stopWhisperSTT() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
     }
-    isRecording = false;
-    micBtn.classList.remove('recording');
+    // isRecording / UI cleared inside onstop
 }
 
 micBtn.addEventListener('click', () => {
@@ -1136,28 +1270,6 @@ function appendMessage(text, isUser = false) {
     }
     chatContainer.appendChild(wrapper);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-}
-
-let confirmationRequestPending = false;
-
-function isOrderConfirmationIntent(text) {
-    if (!text) return false;
-    const clean = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-    
-    // Explicit keywords / phrases that indicate user wants to place/confirm order
-    const phrases = [
-        "yes", "yep", "yup", "yeah", "sure", "ok", "okay",
-        "place order", "place my order", "place it", "confirm", "proceed",
-        "thats all", "that is all", "no more", "no thats all", "no that is all",
-        "no place it", "no place my order", "no place order", "done",
-        "no just place order", "no just place it", "ready", "no thanks", "no thank you"
-    ];
-    
-    if (phrases.includes(clean)) return true;
-    if (clean.includes("place order") || clean.includes("place my order") || clean.includes("place it") || clean.includes("thats all") || clean.includes("that is all")) {
-        return true;
-    }
-    return false;
 }
 
 function handleActions(actions) {
@@ -1235,54 +1347,40 @@ function handleActions(actions) {
     });
 }
 
-async function sendOrderForConfirmation() {
-    if (confirmationRequestPending) return;
-    if (!cart || cart.length === 0) return;
-
-    confirmationRequestPending = true;
-    console.log("[ORDER-FLOW] User confirmed order readiness. Waiting 1500 ms before sending confirmation request...");
-
-    try {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        console.log("[ORDER-FLOW] Sending confirmation request to /chat...");
-
-        typingIndicator.classList.remove("hidden");
-        const res = await fetch("/chat", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                message: "place order",
-                cart: cart
-            })
-        });
-        const data = await res.json();
-        typingIndicator.classList.add("hidden");
-
-        if (data.actions) {
-            handleActions(data.actions);
-        }
-        if (data.response) {
-            appendMessage(data.response);
-            speak(data.response);
-        }
-    } catch (error) {
-        typingIndicator.classList.add("hidden");
-        console.error("[ORDER-FLOW] Confirmation request failed:", error);
-    } finally {
-        confirmationRequestPending = false;
-    }
-}
-
-async function sendMessage(text) {
+/**
+ * Central /chat path used by BOTH voice turns and manual Send.
+ * Serializes all requests via chatInFlight so no two /chat calls run concurrently.
+ * If a request arrives while one is in flight, it is queued and run after.
+ */
+async function sendMessage(text, turnId) {
     if (!text.trim()) return;
+
+    // If another /chat is in flight, queue this job and wait
+    if (chatInFlight) {
+        const label = turnId != null ? ("voice id=" + turnId) : "manual";
+        console.log("[CHAT] queued (" + label + ") — waiting for in-flight request");
+        await new Promise((resolve, reject) => {
+            voiceTurnQueue.push({
+                kind: "chat",
+                text: text,
+                turnId: turnId,
+                resolve: resolve,
+                reject: reject
+            });
+        });
+        return;
+    }
+
+    // Manual Send cancels any pending voice timer so the same transcript is not double-sent
+    cancelAutoSubmit();
+    chatInFlight = true;
     appendMessage(text, true);
     messageInput.value = "";
     typingIndicator.classList.remove("hidden");
     chatContainer.scrollTop = chatContainer.scrollHeight;
-
-    const userWantsConfirmation = isOrderConfirmationIntent(text);
+    if (turnId == null) {
+        console.log("[CHAT] REQUEST START (manual) text=" + text);
+    }
 
     try {
         const res = await fetch("/chat", {
@@ -1295,35 +1393,81 @@ async function sendMessage(text) {
                 cart: cart
             })
         });
+
+        if (!res.ok) {
+            let errorData = null;
+            try { errorData = await res.json(); } catch(e){}
+            console.error("[CHAT] HTTP error:", res.status, errorData);
+            typingIndicator.classList.add("hidden");
+            appendMessage("I couldn't process that request. Please try again.", false);
+            return;
+        }
+
         const data = await res.json();
         typingIndicator.classList.add("hidden");
 
-        if (data.actions) {
+        if (!data) {
+            console.error("[CHAT] Null or empty data returned from server");
+            appendMessage("I couldn't process that request. Please try again.", false);
+            return;
+        }
+
+        if (Array.isArray(data.actions) && data.actions.length > 0) {
             handleActions(data.actions);
         }
 
-        if (data.response) {
+        if (typeof data.response === "string" && data.response.trim().length > 0) {
             appendMessage(data.response);
             speak(data.response);
-        }
-
-        // ONLY trigger sendOrderForConfirmation() after the user explicitly responds that they want to place the order
-        if (userWantsConfirmation && cart.length > 0 && !data.actions?.some(a => a.action === "place_order")) {
-            sendOrderForConfirmation();
+        } else {
+            console.warn("[CHAT] Response string missing in data payload:", data);
         }
     } catch (err) {
         typingIndicator.classList.add("hidden");
+        console.error("[CHAT] Request failed:", err);
         appendMessage(
-            "Sorry, I am having trouble connecting to the server.",
+            "I couldn't process that request. Please try again.",
             false
         );
+    } finally {
+        chatInFlight = false;
+        // Drain queue: next voice or manual job, one at a time
+        if (voiceTurnQueue.length > 0) {
+            const next = voiceTurnQueue.shift();
+            if (next.kind === "chat") {
+                // Queued sendMessage waiter — run the actual request then resolve its promise
+                console.log("[CHAT] draining queued request" + (next.turnId != null ? (" id=" + next.turnId) : " (manual)"));
+                try {
+                    await sendMessage(next.text, next.turnId);
+                    if (next.resolve) next.resolve();
+                } catch (e) {
+                    if (next.reject) next.reject(e);
+                }
+            } else if (next.turnId != null) {
+                // Legacy voice queue shape { turnId, transcript }
+                console.log("[VOICE] submitting queued turn id=" + next.turnId);
+                await submitVoiceTurn(next.transcript, next.turnId);
+            }
+        }
     }
 }
 
 chatForm.addEventListener('submit', e => {
     e.preventDefault();
+    // Manual Send cancels pending voice auto-submit only (does NOT mark voice turn committed)
+    cancelAutoSubmit();
     const text = messageInput.value.trim();
-    if (text) sendMessage(text);
+    if (text) {
+        // Participates in the same chatInFlight serialization as voice turns
+        sendMessage(text);
+    }
+});
+
+// Editing the transcript during the 300ms window cancels that voice auto-submit
+messageInput.addEventListener('input', () => {
+    if (pendingAutoSubmitTimer !== null) {
+        cancelAutoSubmit();
+    }
 });
 
 // Direct Place Order button listener (Manual Order Flow)
@@ -1375,16 +1519,22 @@ async function placeOrder(customer){
         const data = await response.json();
         
         if (response.ok && data.status === "success") {
-            alert("Order placed successfully!");
+            // Keep success + PDF visible for 5 full seconds before any refresh
             if (data.invoice_url) {
+                appendMessage(
+                    `Order placed successfully. <a href="${data.invoice_url}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 underline font-semibold">Download Order PDF</a>`,
+                    false
+                );
                 window.open(data.invoice_url, "_blank");
+            } else {
+                appendMessage("Order placed successfully.", false);
             }
-            cart=[];
+            cart = [];
             renderCart();
-            // Refresh to update dashboard
+            // Dashboard refresh only after success UI has been visible for 5 seconds
             setTimeout(() => {
                 window.location.reload();
-            }, 1500);
+            }, 5000);
         } else {
             alert("Failed to place order: " + (data.error || "Unknown error"));
         }
