@@ -369,9 +369,75 @@ ALIASES = [
     ("cookie", "Cookies"),
     ("donuts", "Donut"),
     ("donut", "Donut"),
+    # Veg Puff — "vegetable" spelling variants (vegetable puff is common typed/spoken variant)
+    ("vegetable puff", "Veg Puff"),
+    ("vegetable puffs", "Veg Puff"),
+    # Veg Sandwich — "vegetable" spelling variants
+    ("vegetable sandwich", "Veg Sandwich"),
+    ("vegetable sandwiches", "Veg Sandwich"),
+    # Paneer Puff — English description variant
+    ("cottage cheese puff", "Paneer Puff"),
 ]
 
+# ---------------------------------------------------------------------------
+# STT_CORRECTIONS — browser/Whisper misrecognition corrections.
+# Applied to the raw transcript BEFORE alias/menu matching.
+#
+# Rules:
+#   - Every corrected value must resolve via ALIASES to an existing MENU item.
+#   - Corrections are whole-word only (no substring replacement).
+#   - Add entries only for misrecognitions confirmed in production console logs.
+# ---------------------------------------------------------------------------
+STT_CORRECTIONS = {
+    # Veg Puff — en-IN Browser STT misrecognitions
+    "veg path":      "veg puff",
+    "bag puff":      "veg puff",
+    "beg puff":      "veg puff",
+    "veg buff":      "veg puff",
+    "beck puff":     "veg puff",
+    "veg puf":       "veg puff",
+    # Veg Sandwich — en-IN Browser STT misrecognitions
+    "big sandwich":  "veg sandwich",
+    "bed sandwich":  "veg sandwich",
+    "bag sandwich":  "veg sandwich",
+    # Aloo Tikki — common en-IN spelling/pronunciation variants
+    "alu tikki":     "aloo tikki",
+    "aloo tiki":     "aloo tikki",
+    "alu tiki":      "aloo tikki",
+    # Vada Pav
+    "wada pav":      "vada pav",
+    "wada paw":      "vada pav",
+    "vada paw":      "vada pav",
+    # Kachori
+    "kachodi":       "kachori",
+    # Paneer Puff
+    "panir puff":    "paneer puff",
+    "panner puff":   "paneer puff",
+}
+
+# Frontend-only threshold (documented here for reference).
+# Browser STT confidence values below this are logged as low-confidence
+# warnings in the frontend onresult handler.
+STT_LOW_CONFIDENCE_THRESHOLD = 0.6
+
+
+def apply_stt_corrections(text: str) -> str:
+    """Apply whole-word STT misrecognition corrections before alias matching."""
+    result = text
+    for wrong, correct in STT_CORRECTIONS.items():
+        result = re.sub(
+            rf"\b{re.escape(wrong)}\b",
+            correct,
+            result,
+            flags=re.IGNORECASE,
+        )
+    if result != text:
+        print(f"[STT-CORRECTION] '{text}' → '{result}'")
+    return result
+
+
 def find_menu_item(text):
+    text = apply_stt_corrections(text)
     t_lower = text.lower()
     for alias, official in ALIASES:
         if re.search(rf"\b{re.escape(alias)}\b", t_lower):
@@ -380,6 +446,7 @@ def find_menu_item(text):
         if item.lower() in t_lower:
             return item
     return None
+
 
 def extract_number(text):
     text_lower = text.lower()
@@ -392,7 +459,7 @@ def extract_number(text):
     return None
 
 def parse_cart_intent(user_text, cart_list):
-    text = user_text.lower().strip()
+    text = apply_stt_corrections(user_text).lower().strip()
     actions = []
 
     # 1. Clear cart

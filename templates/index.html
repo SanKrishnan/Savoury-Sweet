@@ -965,8 +965,12 @@ function startBrowserSTT() {
             if (event.results[i].isFinal) {
                 finalText += (finalText ? " " : "") + transcript;
                 finalCount++;
+                const conf = event.results[i][0].confidence;
                 console.log("[VOICE] STT final result [" + finalCount + "]:", JSON.stringify(transcript),
-                    "confidence=" + (event.results[i][0].confidence || "n/a"));
+                    "confidence=" + (conf !== undefined ? conf : "n/a"));
+                if (conf !== undefined && conf > 0 && conf < 0.6) {
+                    console.warn("[VOICE] Low STT recognition confidence (" + conf + ") for transcript:", JSON.stringify(transcript));
+                }
             } else {
                 interimText += (interimText ? " " : "") + transcript;
                 interimCount++;
