@@ -889,6 +889,7 @@ function onFinalTranscript(transcript) {
 // ── Browser STT path ────────────────────────────────────
 let browserRecognition = null;
 let speechBuffer = "";
+let sttErrorFired = false;  // guard: prevent onend from submitting after an onerror
 
 function startBrowserSTT() {
     if (!SpeechRecognitionAPI) {
@@ -915,6 +916,7 @@ function startBrowserSTT() {
     }
 
     speechBuffer = "";
+    sttErrorFired = false;
 
     browserRecognition = new SpeechRecognitionAPI();
     browserRecognition.continuous = false;
@@ -931,18 +933,48 @@ function startBrowserSTT() {
         console.log("[VOICE] Microphone active (Browser STT)");
     };
 
+    // Diagnostic: audio stream acquired from mic hardware
+    browserRecognition.onaudiostart = () => {
+        console.log("[VOICE] STT onaudiostart — audio stream opened");
+    };
+
+    // Diagnostic: actual voice detected in audio stream
+    browserRecognition.onspeechstart = () => {
+        console.log("[VOICE] STT onspeechstart — speech detected in audio stream");
+    };
+
+    // Diagnostic: voice detection ended (may still be processing)
+    browserRecognition.onspeechend = () => {
+        console.log("[VOICE] STT onspeechend — speech detection ended (processing may continue)");
+    };
+
+    // Diagnostic: audio stream closed
+    browserRecognition.onaudioend = () => {
+        console.log("[VOICE] STT onaudioend — audio stream closed");
+    };
+
     browserRecognition.onresult = (event) => {
         let finalText = speechBuffer;
         let interimText = "";
+        let finalCount = 0;
+        let interimCount = 0;
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript.trim();
             if (!transcript) continue;
             if (event.results[i].isFinal) {
                 finalText += (finalText ? " " : "") + transcript;
+                finalCount++;
+                console.log("[VOICE] STT final result [" + finalCount + "]:", JSON.stringify(transcript),
+                    "confidence=" + (event.results[i][0].confidence || "n/a"));
             } else {
                 interimText += (interimText ? " " : "") + transcript;
+                interimCount++;
             }
+        }
+
+        if (interimCount > 0) {
+            console.log("[VOICE] STT interim result:", JSON.stringify(interimText));
         }
 
         speechBuffer = finalText;
@@ -951,22 +983,73 @@ function startBrowserSTT() {
     };
 
     browserRecognition.onerror = (event) => {
-        console.error("[VOICE] Browser STT error:", event.error);
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-            appendMessage("Microphone permission was denied.", false);
-        } else if (event.error === "audio-capture") {
-            appendMessage("No microphone was detected.", false);
-        }
+        const code = event.error || "unknown";
+        sttErrorFired = true;
         isRecording = false;
         micBtn.classList.remove("recording");
+
+        if (code === "no-speech") {
+            // Not a hardware/permission error — the mic captured audio but no speech was detected.
+            // In production this often means the recognition cloud service timed out waiting
+            // for recognisable speech, or the background noise threshold wasn't crossed.
+            console.warn("[VOICE] STT no-speech — microphone captured audio but no recognisable speech detected.", event);
+            appendMessage("No speech was detected. Please speak clearly and try again.", false);
+
+        } else if (code === "network") {
+            // The browser's speech recognition service (Google cloud) is unreachable.
+            // This is the most common production-only failure when the browser's STT
+            // cloud backend cannot be reached from the user's network.
+            console.error("[VOICE] STT network error — the speech recognition service is unreachable.", event);
+            appendMessage(
+                "Speech recognition failed — the browser's speech service could not be reached. " +
+                "Please check your network connection or switch to Whisper mode.",
+                false
+            );
+
+        } else if (code === "not-allowed" || code === "service-not-allowed") {
+            console.error("[VOICE] STT not-allowed — microphone permission denied.", event);
+            appendMessage("Microphone permission was denied. Please allow microphone access and try again.", false);
+
+        } else if (code === "audio-capture") {
+            console.error("[VOICE] STT audio-capture — no microphone detected.", event);
+            appendMessage("No microphone was detected. Please connect a microphone and try again.", false);
+
+        } else if (code === "aborted") {
+            // Fired when .stop() or .abort() is called deliberately — not a real error.
+            console.log("[VOICE] STT aborted (stopped by user or code).", event);
+            sttErrorFired = false;  // aborted is intentional; still allow submit if buffer has content
+
+        } else if (code === "language-not-supported") {
+            console.error("[VOICE] STT language-not-supported for lang=" + browserRecognition.lang, event);
+            appendMessage(
+                "The selected language is not supported by your browser's speech recognition. " +
+                "Please try a different language or type your message.",
+                false
+            );
+
+        } else {
+            console.error("[VOICE] STT error (code=" + code + "):", event);
+            appendMessage("Speech recognition encountered an unexpected error (" + code + "). Please try again.", false);
+        }
     };
 
     browserRecognition.onend = () => {
-        console.log("[VOICE] Browser STT ended");
         isRecording = false;
         micBtn.classList.remove("recording");
-        if (speechBuffer && speechBuffer.trim()) {
-            onFinalTranscript(speechBuffer.trim());
+
+        if (sttErrorFired) {
+            // onerror already showed a user message and set sttErrorFired.
+            // Do not attempt to submit a (likely empty) speechBuffer.
+            console.log("[VOICE] Browser STT ended after error — skipping auto-submit. speechBuffer=" + JSON.stringify(speechBuffer));
+            return;
+        }
+
+        const finalTranscript = (speechBuffer || "").trim();
+        if (finalTranscript) {
+            console.log("[VOICE] Browser STT ended — submitting transcript:", JSON.stringify(finalTranscript));
+            onFinalTranscript(finalTranscript);
+        } else {
+            console.log("[VOICE] Browser STT ended — no transcript captured (speechBuffer empty).");
         }
     };
 
