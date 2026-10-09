@@ -1367,7 +1367,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
                 valid_text, fail_cat = clean_and_validate_transcript(raw_text)
 
                 if not valid_text:
-                    print(f"[WHISPER] Groq transcript rejected: category={fail_cat!r}, raw_text={raw_text!r}")
+                    # Avoid logging or returning raw speech transcripts; they may contain personal information.
+                    print(f"[WHISPER] Groq transcript rejected: category={fail_cat!r}, transcript_length={len(raw_text or '')}")
                     return JSONResponse(
                         status_code=400,
                         content={
@@ -1378,7 +1379,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
                                 "content_type": content_type,
                                 "byte_count": byte_count,
                                 "provider": "groq",
-                                "raw_transcript": raw_text
+                                "transcript_length": len(raw_text or "")
                             }
                         }
                     )
@@ -1416,7 +1417,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
                 valid_text, fail_cat = clean_and_validate_transcript(raw_text)
 
                 if not valid_text:
-                    print(f"[WHISPER] OpenAI transcript rejected: category={fail_cat!r}, raw_text={raw_text!r}")
+                    # Avoid logging or returning raw speech transcripts; they may contain personal information.
+                    print(f"[WHISPER] OpenAI transcript rejected: category={fail_cat!r}, transcript_length={len(raw_text or '')}")
                     return JSONResponse(
                         status_code=400,
                         content={
@@ -1427,7 +1429,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
                                 "content_type": content_type,
                                 "byte_count": byte_count,
                                 "provider": "openai",
-                                "raw_transcript": raw_text
+                                "transcript_length": len(raw_text or "")
                             }
                         }
                     )

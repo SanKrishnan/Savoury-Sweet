@@ -872,18 +872,22 @@ let chatInFlight = false;
 function onFinalTranscript(transcript) {
     const text = (transcript || "").trim();
     if (!text) {
-        console.log("[VOICE] Empty transcript received, skipping auto-submit");
+        console.log("[VOICE] Empty transcript received; nothing to send.");
         return;
     }
+
+    // Show the recognized words in the input first, then submit through the same
+    // sendMessage path used by the Send button. The short delay lets the user
+    // see what was recognized; sendMessage then displays it in the chat and
+    // clears the input as part of the normal send flow.
     messageInput.value = text;
-    console.log("[VOICE] Transcript set in input box:", text);
-    
-    if (chatInFlight) {
-        console.log("[VOICE] /chat request already in flight, skipping auto-submit");
-        return;
-    }
-    console.log("[VOICE] Auto-submitting transcript to /chat:", text);
-    sendMessage(text);
+    messageInput.focus();
+    console.log("[VOICE] Transcript filled in the input box; auto-sending recognized speech.");
+    window.setTimeout(() => {
+        if (messageInput.value.trim() === text && !chatInFlight) {
+            sendMessage(text);
+        }
+    }, 350);
 }
 
 // ── Browser STT path ────────────────────────────────────
@@ -1038,22 +1042,23 @@ function startBrowserSTT() {
         micBtn.classList.remove("recording");
 
         if (sttErrorFired) {
-            console.log("[VOICE] Browser STT ended after error — skipping auto-submit. speechBuffer=" + JSON.stringify(speechBuffer));
+            console.log("[VOICE] Browser STT ended after an error; no transcript will be submitted.");
             return;
         }
 
         let finalTranscript = (speechBuffer || "").trim();
         // Fallback: If no isFinal result arrived before onend, use lastInterimBuffer
         if (!finalTranscript && lastInterimBuffer && lastInterimBuffer.trim()) {
-            console.log("[VOICE] Using interim transcript fallback on recognition end:", JSON.stringify(lastInterimBuffer));
+            console.log("[VOICE] Using the last interim result because no final result arrived.");
             finalTranscript = lastInterimBuffer.trim();
         }
 
         if (finalTranscript) {
-            console.log("[VOICE] Browser STT ended — submitting transcript:", JSON.stringify(finalTranscript));
+            console.log("[VOICE] Browser STT ended with transcript text; filling input and auto-sending.");
             onFinalTranscript(finalTranscript);
         } else {
-            console.log("[VOICE] Browser STT ended — no transcript captured (both speechBuffer and interim empty).");
+            console.warn("[VOICE] Browser STT ended without a transcript. Try again, or switch to Whisper mode.");
+            appendMessage("I couldn't capture that speech. Please try again, switch to Whisper mode, or type your message.", false);
         }
     };
 
@@ -1137,7 +1142,7 @@ async function startWhisperSTT() {
                 const data = await res.json();
 
                 if (res.ok && data.transcript) {
-                    console.log(`[VOICE] Whisper transcription success via ${data.provider || 'server'}:`, data.transcript);
+                    console.log(`[VOICE] Whisper transcription success via ${data.provider || 'server'}.`);
                     onFinalTranscript(data.transcript);
                 } else {
                     const category = data.error_category || 'unknown';
