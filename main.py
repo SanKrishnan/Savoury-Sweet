@@ -1291,19 +1291,26 @@ async def transcribe_audio(file: UploadFile = File(...)):
     """
     Accepts an audio blob (webm/ogg/wav/mp4) and returns the transcription.
     Supports Groq Whisper (if GROQ_API_KEY is set) or OpenAI Whisper (if OPENAI_API_KEY is set).
+    Returns structured JSON with error_category on failures for diagnostic clarity.
     """
-    print("[WHISPER] Request received")
-    print(f"[WHISPER] Filename: {file.filename}, Content type: {file.content_type}")
+    filename = file.filename or "audio.webm"
+    content_type = file.content_type or "audio/webm"
+    print(f"[WHISPER] Request received: filename={filename!r}, content_type={content_type!r}")
 
     try:
         audio_bytes = await file.read()
-        print(f"[WHISPER] File size: {len(audio_bytes)} bytes")
+        byte_count = len(audio_bytes)
+        print(f"[WHISPER] Diagnostic: filename={filename!r}, content_type={content_type!r}, byte_count={byte_count}")
 
-        if len(audio_bytes) == 0:
-            print("[WHISPER] Error: Received empty audio file")
+        if byte_count == 0:
+            print("[WHISPER] Failure: Received empty audio file (0 bytes)")
             return JSONResponse(
                 status_code=400,
-                content={"error": "Audio file is empty"}
+                content={
+                    "error": "Audio file is empty. Please speak into your microphone and try again.",
+                    "error_category": "empty_audio",
+                    "details": {"filename": filename, "content_type": content_type, "byte_count": 0}
+                }
             )
 
         prompt_text = (
@@ -1314,13 +1321,20 @@ async def transcribe_audio(file: UploadFile = File(...)):
             "Muffin, Choco Chip Cookies, Cookies, Donut, Chocolate Donut, Cold Coffee, Chocolate Shake, Mango Shake."
         )
 
-        # Helper to validate and filter out Whisper subtitle hallucinations or empty outputs
         def clean_and_validate_transcript(raw_text: str):
+            """
+            Validates transcript text. Returns tuple: (valid_text_or_None, category_if_rejected)
+            Categories: 'empty_transcription', 'rejected_transcription', or None (valid).
+            """
             if not raw_text:
-                return None
+                return None, "empty_transcription"
+
             cleaned = raw_text.strip()
             lowered = cleaned.lower()
-            
+
+            if not cleaned or len(cleaned) < 2:
+                return None, "empty_transcription"
+
             # Common Whisper subtitle hallucinations on brief/silent audio
             hallucination_triggers = [
                 "sous-titrage", "sous-titres", "subtitles", "thank you for watching",
@@ -1328,23 +1342,19 @@ async def transcribe_audio(file: UploadFile = File(...)):
                 "captioned", "transcription by", "translated by", "copyright"
             ]
 
-            if not cleaned or len(cleaned) < 2:
-                return None
-
             if lowered in {"thank you", "thank you.", "thanks", "thanks.", "you", "you."}:
-                return None
+                return None, "rejected_transcription"
 
             if any(h in lowered for h in hallucination_triggers):
-                return None
+                return None, "rejected_transcription"
 
-            return cleaned
+            return cleaned, None
 
         # 1. Try Groq Whisper API if GROQ_API_KEY is configured
         if GROQ_API_KEY:
             try:
-                print("[WHISPER] Attempting transcription via Groq API...")
+                print("[WHISPER] Attempting transcription via Groq API (whisper-large-v3-turbo)...")
                 client_groq = Groq(api_key=GROQ_API_KEY)
-                filename = file.filename or "audio.webm"
                 transcription = client_groq.audio.transcriptions.create(
                     file=(filename, audio_bytes),
                     model="whisper-large-v3-turbo",
@@ -1353,32 +1363,48 @@ async def transcribe_audio(file: UploadFile = File(...)):
                     temperature=0.0,
                     prompt=prompt_text
                 )
-                text = transcription.text if hasattr(transcription, 'text') else str(transcription)
-                valid_text = clean_and_validate_transcript(text)
+                raw_text = transcription.text if hasattr(transcription, 'text') else str(transcription)
+                valid_text, fail_cat = clean_and_validate_transcript(raw_text)
+
                 if not valid_text:
-                    print(f"[WHISPER] Rejected empty or hallucinated transcript: {text!r}")
+                    print(f"[WHISPER] Groq transcript rejected: category={fail_cat!r}, raw_text={raw_text!r}")
                     return JSONResponse(
                         status_code=400,
-                        content={"error": "Could not recognize clear speech from audio. Please speak again."}
+                        content={
+                            "error": "Could not recognize clear speech from audio. Please speak clearly into your microphone.",
+                            "error_category": fail_cat,
+                            "details": {
+                                "filename": filename,
+                                "content_type": content_type,
+                                "byte_count": byte_count,
+                                "provider": "groq",
+                                "raw_transcript": raw_text
+                            }
+                        }
                     )
-                print(f"[WHISPER] Groq transcription success: {valid_text}")
-                return JSONResponse(content={"transcript": valid_text})
+
+                print(f"[WHISPER] Groq transcription success: {valid_text!r}")
+                return JSONResponse(content={"transcript": valid_text, "provider": "groq"})
+
             except Exception as e:
-                print(f"[WHISPER] Groq Whisper error: {e}")
+                print(f"[WHISPER] Groq Whisper provider error: {e}")
                 traceback.print_exc()
                 if not OPENAI_API_KEY:
                     return JSONResponse(
-                        content={"error": f"Groq Whisper error: {str(e)}"},
-                        status_code=500
+                        status_code=500,
+                        content={
+                            "error": f"Groq Whisper transcription failed: {str(e)}",
+                            "error_category": "provider_error",
+                            "details": {"provider": "groq", "filename": filename, "byte_count": byte_count}
+                        }
                     )
 
         # 2. Try OpenAI Whisper API if OPENAI_API_KEY is configured
         if OPENAI_API_KEY:
             try:
-                print("[WHISPER] Attempting transcription via OpenAI API...")
+                print("[WHISPER] Attempting transcription via OpenAI API (whisper-1)...")
                 import openai
                 client_oai = openai.OpenAI(api_key=OPENAI_API_KEY)
-                filename = file.filename or "audio.webm"
                 transcription = client_oai.audio.transcriptions.create(
                     model="whisper-1",
                     file=(filename, audio_bytes),
@@ -1386,35 +1412,61 @@ async def transcribe_audio(file: UploadFile = File(...)):
                     temperature=0.0,
                     prompt=prompt_text
                 )
-                text = transcription.text
-                valid_text = clean_and_validate_transcript(text)
+                raw_text = transcription.text
+                valid_text, fail_cat = clean_and_validate_transcript(raw_text)
+
                 if not valid_text:
-                    print(f"[WHISPER] Rejected empty or hallucinated transcript: {text!r}")
+                    print(f"[WHISPER] OpenAI transcript rejected: category={fail_cat!r}, raw_text={raw_text!r}")
                     return JSONResponse(
                         status_code=400,
-                        content={"error": "Could not recognize clear speech from audio. Please speak again."}
+                        content={
+                            "error": "Could not recognize clear speech from audio. Please speak clearly into your microphone.",
+                            "error_category": fail_cat,
+                            "details": {
+                                "filename": filename,
+                                "content_type": content_type,
+                                "byte_count": byte_count,
+                                "provider": "openai",
+                                "raw_transcript": raw_text
+                            }
+                        }
                     )
-                print(f"[WHISPER] OpenAI transcription success: {valid_text}")
-                return JSONResponse(content={"transcript": valid_text})
+
+                print(f"[WHISPER] OpenAI transcription success: {valid_text!r}")
+                return JSONResponse(content={"transcript": valid_text, "provider": "openai"})
+
             except Exception as e:
-                print(f"[WHISPER] OpenAI Whisper error: {e}")
+                print(f"[WHISPER] OpenAI Whisper provider error: {e}")
                 traceback.print_exc()
                 return JSONResponse(
-                    content={"error": f"OpenAI Whisper error: {str(e)}"},
-                    status_code=500
+                    status_code=500,
+                    content={
+                        "error": f"OpenAI Whisper transcription failed: {str(e)}",
+                        "error_category": "provider_error",
+                        "details": {"provider": "openai", "filename": filename, "byte_count": byte_count}
+                    }
                 )
 
-        print("[WHISPER] Error: Neither GROQ_API_KEY nor OPENAI_API_KEY configured")
+        print("[WHISPER] Failure: Neither GROQ_API_KEY nor OPENAI_API_KEY is configured.")
         return JSONResponse(
             status_code=503,
-            content={"error": "Whisper API key not configured (neither GROQ_API_KEY nor OPENAI_API_KEY found in environment)."}
+            content={
+                "error": "Whisper API key not configured (neither GROQ_API_KEY nor OPENAI_API_KEY set in environment).",
+                "error_category": "config_error",
+                "details": {"provider": "none"}
+            }
         )
+
     except Exception as e:
         print(f"[WHISPER] Unexpected endpoint error: {e}")
         traceback.print_exc()
         return JSONResponse(
             status_code=500,
-            content={"error": f"Server transcription error: {str(e)}"}
+            content={
+                "error": f"Server transcription error: {str(e)}",
+                "error_category": "server_error",
+                "details": {"filename": filename}
+            }
         )
 
 

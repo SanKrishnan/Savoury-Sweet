@@ -889,6 +889,7 @@ function onFinalTranscript(transcript) {
 // ── Browser STT path ────────────────────────────────────
 let browserRecognition = null;
 let speechBuffer = "";
+let lastInterimBuffer = "";
 let sttErrorFired = false;  // guard: prevent onend from submitting after an onerror
 
 function startBrowserSTT() {
@@ -916,6 +917,7 @@ function startBrowserSTT() {
     }
 
     speechBuffer = "";
+    lastInterimBuffer = "";
     sttErrorFired = false;
 
     browserRecognition = new SpeechRecognitionAPI();
@@ -982,6 +984,7 @@ function startBrowserSTT() {
         }
 
         speechBuffer = finalText;
+        lastInterimBuffer = interimText;
         const displayText = (finalText + (interimText ? " " + interimText : "")).trim();
         messageInput.value = displayText;
     };
@@ -993,16 +996,10 @@ function startBrowserSTT() {
         micBtn.classList.remove("recording");
 
         if (code === "no-speech") {
-            // Not a hardware/permission error — the mic captured audio but no speech was detected.
-            // In production this often means the recognition cloud service timed out waiting
-            // for recognisable speech, or the background noise threshold wasn't crossed.
             console.warn("[VOICE] STT no-speech — microphone captured audio but no recognisable speech detected.", event);
             appendMessage("No speech was detected. Please speak clearly and try again.", false);
 
         } else if (code === "network") {
-            // The browser's speech recognition service (Google cloud) is unreachable.
-            // This is the most common production-only failure when the browser's STT
-            // cloud backend cannot be reached from the user's network.
             console.error("[VOICE] STT network error — the speech recognition service is unreachable.", event);
             appendMessage(
                 "Speech recognition failed — the browser's speech service could not be reached. " +
@@ -1019,9 +1016,8 @@ function startBrowserSTT() {
             appendMessage("No microphone was detected. Please connect a microphone and try again.", false);
 
         } else if (code === "aborted") {
-            // Fired when .stop() or .abort() is called deliberately — not a real error.
             console.log("[VOICE] STT aborted (stopped by user or code).", event);
-            sttErrorFired = false;  // aborted is intentional; still allow submit if buffer has content
+            sttErrorFired = false;
 
         } else if (code === "language-not-supported") {
             console.error("[VOICE] STT language-not-supported for lang=" + browserRecognition.lang, event);
@@ -1042,18 +1038,22 @@ function startBrowserSTT() {
         micBtn.classList.remove("recording");
 
         if (sttErrorFired) {
-            // onerror already showed a user message and set sttErrorFired.
-            // Do not attempt to submit a (likely empty) speechBuffer.
             console.log("[VOICE] Browser STT ended after error — skipping auto-submit. speechBuffer=" + JSON.stringify(speechBuffer));
             return;
         }
 
-        const finalTranscript = (speechBuffer || "").trim();
+        let finalTranscript = (speechBuffer || "").trim();
+        // Fallback: If no isFinal result arrived before onend, use lastInterimBuffer
+        if (!finalTranscript && lastInterimBuffer && lastInterimBuffer.trim()) {
+            console.log("[VOICE] Using interim transcript fallback on recognition end:", JSON.stringify(lastInterimBuffer));
+            finalTranscript = lastInterimBuffer.trim();
+        }
+
         if (finalTranscript) {
             console.log("[VOICE] Browser STT ended — submitting transcript:", JSON.stringify(finalTranscript));
             onFinalTranscript(finalTranscript);
         } else {
-            console.log("[VOICE] Browser STT ended — no transcript captured (speechBuffer empty).");
+            console.log("[VOICE] Browser STT ended — no transcript captured (both speechBuffer and interim empty).");
         }
     };
 
@@ -1127,6 +1127,8 @@ async function startWhisperSTT() {
             const ext = actualMime.includes('mp4') ? 'mp4' : (actualMime.includes('ogg') ? 'ogg' : (actualMime.includes('wav') ? 'wav' : 'webm'));
             const filename = `audio.${ext}`;
 
+            console.log(`[VOICE] Uploading audio: filename="${filename}", mime="${actualMime}", size=${blob.size} bytes`);
+
             const formData = new FormData();
             formData.append('file', blob, filename);
 
@@ -1135,11 +1137,20 @@ async function startWhisperSTT() {
                 const data = await res.json();
 
                 if (res.ok && data.transcript) {
+                    console.log(`[VOICE] Whisper transcription success via ${data.provider || 'server'}:`, data.transcript);
                     onFinalTranscript(data.transcript);
                 } else {
-                    const errDetail = data.error || data.detail || `Server returned status ${res.status}`;
-                    console.error("[VOICE] Whisper error:", errDetail);
-                    appendMessage(`Whisper unavailable (${errDetail}). You can switch to Browser STT or type your message.`, false);
+                    const category = data.error_category || 'unknown';
+                    const errDetail = data.error || data.detail || `Server status ${res.status}`;
+                    console.error(`[VOICE] Whisper error (category=${category}, status=${res.status}):`, errDetail, data.details || {});
+
+                    if (category === 'rejected_transcription' || category === 'empty_audio' || category === 'empty_transcription') {
+                        appendMessage(`Could not hear clear speech. Please speak clearly into your microphone and try again.`, false);
+                    } else if (category === 'config_error') {
+                        appendMessage("Whisper service is not configured on the server. Please switch to Browser STT or type your message.", false);
+                    } else {
+                        appendMessage(`Whisper error: ${errDetail}. You can switch to Browser STT or type your message.`, false);
+                    }
                 }
             } catch (err) {
                 console.error("[VOICE] Network error during Whisper transcription:", err);
