@@ -894,9 +894,11 @@ function onFinalTranscript(transcript) {
 let browserRecognition = null;
 let speechBuffer = "";
 let lastInterimBuffer = "";
-let sttErrorFired = false;  // guard: prevent onend from submitting after an onerror
+let sttErrorFired = false;
+let browserRetryCount = 0;
 
-function startBrowserSTT() {
+function startBrowserSTT(isRetry = false) {
+    if (!isRetry) browserRetryCount = 0;
     if (!SpeechRecognitionAPI) {
         console.error("[BROWSER-STT] SpeechRecognition API not supported.");
         appendMessage(
@@ -965,20 +967,24 @@ function startBrowserSTT() {
         let finalCount = 0;
         let interimCount = 0;
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript.trim();
+        // Read the full result list, not just resultIndex: Chrome can revise interim
+        // entries before emitting a final result. Keep only the latest interim text.
+        for (let i = 0; i < event.results.length; i++) {
+            const transcript = (event.results[i][0].transcript || "").trim();
             if (!transcript) continue;
             if (event.results[i].isFinal) {
-                finalText += (finalText ? " " : "") + transcript;
-                finalCount++;
-                const conf = event.results[i][0].confidence;
-                console.log("[VOICE] STT final result [" + finalCount + "]:", JSON.stringify(transcript),
-                    "confidence=" + (conf !== undefined ? conf : "n/a"));
-                if (conf !== undefined && conf > 0 && conf < 0.6) {
-                    console.warn("[VOICE] Low STT recognition confidence (" + conf + ") for transcript:", JSON.stringify(transcript));
+                if (i >= event.resultIndex) {
+                    finalText += (finalText ? " " : "") + transcript;
+                    finalCount++;
+                    const conf = event.results[i][0].confidence;
+                    console.log("[VOICE] STT final result [" + finalCount + "]:", JSON.stringify(transcript),
+                        "confidence=" + (conf !== undefined ? conf : "n/a"));
+                    if (conf !== undefined && conf > 0 && conf < 0.6) {
+                        console.warn("[VOICE] Low STT recognition confidence (" + conf + ") for transcript.");
+                    }
                 }
             } else {
-                interimText += (interimText ? " " : "") + transcript;
+                interimText = transcript;
                 interimCount++;
             }
         }
@@ -1041,12 +1047,14 @@ function startBrowserSTT() {
         isRecording = false;
         micBtn.classList.remove("recording");
 
-        if (sttErrorFired) {
-            console.log("[VOICE] Browser STT ended after an error; no transcript will be submitted.");
+        let finalTranscript = (speechBuffer || "").trim();
+        // A browser service can fire an error after returning a usable result.
+        // Preserve and submit that result; only stop when there is truly no text.
+        if (sttErrorFired && !finalTranscript && !(lastInterimBuffer || "").trim()) {
+            console.log("[VOICE] Browser STT ended after an error without any transcript.");
             return;
         }
 
-        let finalTranscript = (speechBuffer || "").trim();
         // Fallback: If no isFinal result arrived before onend, use lastInterimBuffer
         if (!finalTranscript && lastInterimBuffer && lastInterimBuffer.trim()) {
             console.log("[VOICE] Using the last interim result because no final result arrived.");
@@ -1054,11 +1062,20 @@ function startBrowserSTT() {
         }
 
         if (finalTranscript) {
+            browserRetryCount = 0;
             console.log("[VOICE] Browser STT ended with transcript text; filling input and auto-sending.");
             onFinalTranscript(finalTranscript);
+        } else if (browserRetryCount < 1) {
+            // Chrome's remote recognition service occasionally closes a session without
+            // onresult. Retry once automatically instead of making the user restart.
+            browserRetryCount++;
+            console.warn("[VOICE] No transcript returned; retrying browser recognition once.");
+            appendMessage("I didn't receive the words that time. Listening once more—please say your order again.", false);
+            window.setTimeout(() => startBrowserSTT(true), 400);
         } else {
-            console.warn("[VOICE] Browser STT ended without a transcript. Try again, or switch to Whisper mode.");
-            appendMessage("I couldn't capture that speech. Please try again, switch to Whisper mode, or type your message.", false);
+            browserRetryCount = 0;
+            console.warn("[VOICE] Browser STT ended without a transcript after retry.");
+            appendMessage("I couldn't capture that speech. Please try Whisper mode or type your message.", false);
         }
     };
 

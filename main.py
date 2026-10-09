@@ -1342,7 +1342,10 @@ async def transcribe_audio(file: UploadFile = File(...)):
                 "captioned", "transcription by", "translated by", "copyright"
             ]
 
-            if lowered in {"thank you", "thank you.", "thanks", "thanks.", "you", "you."}:
+            # Do not reject a transcript merely because it is short: valid orders such
+            # as "Cake" or "Aloo Tikki" can be brief. Keep only the exact generic
+            # filler phrases that commonly appear on silence, plus known artifacts.
+            if lowered.rstrip(".!? ") in {"thank you", "thanks", "you"}:
                 return None, "rejected_transcription"
 
             if any(h in lowered for h in hallucination_triggers):
@@ -1353,11 +1356,11 @@ async def transcribe_audio(file: UploadFile = File(...)):
         # 1. Try Groq Whisper API if GROQ_API_KEY is configured
         if GROQ_API_KEY:
             try:
-                print("[WHISPER] Attempting transcription via Groq API (whisper-large-v3-turbo)...")
+                print("[WHISPER] Attempting transcription via Groq API (whisper-large-v3)...")
                 client_groq = Groq(api_key=GROQ_API_KEY)
                 transcription = client_groq.audio.transcriptions.create(
                     file=(filename, audio_bytes),
-                    model="whisper-large-v3-turbo",
+                    model="whisper-large-v3",
                     response_format="json",
                     language="en",
                     temperature=0.0,
