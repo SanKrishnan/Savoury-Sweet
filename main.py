@@ -172,12 +172,84 @@ customer_names: Dict[str, str] = {}
 # Store tentative name awaiting confirmation
 name_confirmation_pending: Dict[str, str] = {}
 
+# ── Semantic intent classifier ───────────────────────────────────────────────
+# Returned labels: CONFIRM_ORDER | NEGATIVE | OTHER | UNCERTAIN
+_INTENT_SYSTEM = (
+    "You are an intent classifier for a bakery ordering chatbot. "
+    "Classify the customer's message into exactly one label:\n"
+    "  CONFIRM_ORDER – the customer wants to place / confirm / proceed with their order "
+    "(e.g. 'yes', 'go ahead', 'please order', 'I'm ready', 'proceed', 'confirm', "
+    "'that's all, place it', 'yes please', 'I want to place the order').\n"
+    "  NEGATIVE – the customer declines, e.g. 'no', 'not yet', 'cancel', 'wait'.\n"
+    "  OTHER – anything else (modifying items, asking questions, giving their name, etc.).\n"
+    "  UNCERTAIN – you genuinely cannot tell.\n"
+    "Reply with only the label, nothing else."
+)
 
-awaiting_manual_name: Dict[str, bool] = {}  # True when awaiting typed name after STT name rejected
+
+def classify_order_intent(message: str) -> str:
+    """
+    Returns 'CONFIRM_ORDER', 'NEGATIVE', 'OTHER', or 'UNCERTAIN'.
+    Falls back to 'UNCERTAIN' on any error so the caller can ask for clarification.
+    """
+    # Fast deterministic guards to save an LLM round-trip.
+    normalized = re.sub(r"[^a-z\s]", "", message.lower()).strip()
+    words = normalized.split()
+
+    _FAST_NEGATIVE = {"no", "n", "nope", "nah", "nahi", "cancel", "wait", "stop"}
+    if words and all(w in _FAST_NEGATIVE for w in words):
+        return "NEGATIVE"
+
+    # Single-word or short obvious affirmatives
+    _FAST_AFFIRM = {
+        "yes", "y", "yeah", "yep", "yup", "sure", "okay", "ok", "haan",
+        "ha", "proceed", "confirm",
+    }
+    if words and all(w in _FAST_AFFIRM for w in words):
+        return "CONFIRM_ORDER"
+
+    # Keyword shortcuts that don't need the LLM
+    _CONFIRM_PHRASES = (
+        "place order", "place my order", "go ahead", "ready to order",
+        "want to place", "place the order", "please order","yes please",
+    )
+    if any(p in normalized for p in _CONFIRM_PHRASES):
+        return "CONFIRM_ORDER"
+
+    # Fast deterministic negative phrases
+    _NEGATIVE_PHRASES = (
+        "not yet", "no thanks", "dont place", "do not place", "no not yet", "cancel my order", "dont order"
+    )
+    if any(p in normalized for p in _NEGATIVE_PHRASES):
+        return "NEGATIVE"
+
+    # Ask the LLM for anything ambiguous
+    if not GROQ_API_KEY:
+        return "UNCERTAIN"
+
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        completion = client.chat.completions.create(
+            model=GROQ_MODEL,
+            temperature=0,
+            max_tokens=10,
+            messages=[
+                {"role": "system", "content": _INTENT_SYSTEM},
+                {"role": "user", "content": message},
+            ],
+        )
+        label = completion.choices[0].message.content.strip().upper()
+        if label in {"CONFIRM_ORDER", "NEGATIVE", "OTHER", "UNCERTAIN"}:
+            return label
+        return "UNCERTAIN"
+    except Exception as exc:
+        print(f"[INTENT] classifier error: {exc}")
+        return "UNCERTAIN"
 
 class ChatRequest(BaseModel):
     message: str
     cart: List[Dict[str, Any]] = []
+    session_id: str = "web_user_123"
 
 MENU = {
     # Savoury – Indian Snacks
@@ -781,9 +853,10 @@ async def serve_ui(request: Request):
     )
 
 
+
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-    session_id = "web_user_123"
+    session_id = request.session_id or "web_user_123"
     message = request.message.strip()
     message_lower = message.lower()
 
@@ -795,134 +868,47 @@ async def chat_endpoint(request: ChatRequest):
             for i in request.cart
         )
 
-    # 1. ALWAYS run the deterministic parser first.
-    #    Cart-modification intents (replace, add, set, remove, clear) must never
-    #    be blocked by the pending_confirmation gate — a user can change their
-    #    mind at any point during the order flow.
+    # ── Step 1: Deterministic cart-intent parser ─────────────────────────────
+    # Runs first so cart modifications never reach the intent classifier.
     intent_actions = parse_cart_intent(message, request.cart)
 
     if intent_actions:
-        # Any real cart action clears the confirmation gate
         pending_confirmation.pop(session_id, None)
+        waiting_for_name.pop(session_id, None)
+        name_confirmation_pending.pop(session_id, None)
 
-        # Set pending confirmation if any action modified the cart (and not clear_cart)
-        if not (len(intent_actions) == 1 and intent_actions[0].get("action") == "clear_cart"):
+        if not (
+            len(intent_actions) == 1
+            and intent_actions[0].get("action") == "clear_cart"
+        ):
             pending_confirmation[session_id] = True
 
-        resp_text = build_cart_response(intent_actions)
         return {
-            "response": resp_text,
-            "actions": intent_actions
+            "response": build_cart_response(intent_actions),
+            "actions": intent_actions,
         }
 
-    # Direct confirmation / place order trigger check
-    if (message_lower in ["place order", "confirm", "proceed", "please confirm this order."] or "place order" in message_lower) and request.cart:
-        pending_confirmation.pop(session_id, None)
-        waiting_for_name[session_id] = True
-        return {
-            "response": "Great! Before I place your order, may I know your name?",
-            "actions": []
-        }
+    # ── Step 2: Name-confirmation state (highest priority after cart ops) ────
+    # Interpret yes / no as confirmation of the pending tentative name.
+    # Ambiguous replies re-prompt without losing the tentative name.
+    if name_confirmation_pending.get(session_id):
+        tentative = name_confirmation_pending[session_id]
 
-    # 2. No cart-modify intent — now check the confirmation gate.
-    # Name handling – first stage: capture spoken name and ask for confirmation.
-    if waiting_for_name.get(session_id):
-        waiting_for_name.pop(session_id)
-
-        raw_name = message.strip()
-
-        # Extract name from common voice phrases
-        name_match = re.search(r"(?:my name is|i am|i'm|this is|name is)\s+(.+)",raw_name,re.IGNORECASE )
-        if name_match:
-            tentative = name_match.group(1).strip()
-        else:
-            tentative = raw_name or "Guest Customer"
-
-        name_confirmation_pending[session_id] = tentative
-        return {
-            "response": f'I heard your name as "{tentative}". Is that correct?',
-            "actions": []
-        }
-    
-    if pending_confirmation.get(session_id):
         normalized = re.sub(r"[^a-zA-Z\s]", "", message_lower).strip()
         words = normalized.split()
 
-        affirmative_words = {
+        _NAME_YES = {
             "yes", "y", "yeah", "yep", "yup",
-            "sure", "okay", "ok", "haan", "ha"
+            "sure", "correct", "right", "okay", "ok", "haan", "ha",
+        }
+        _NAME_NO = {
+            "no", "n", "nope", "nah", "wrong", "incorrect",
         }
 
-        negative_words = {
-            "no", "n", "nope", "nah", "nahi"
-        }
-
-        is_affirmative = (
-            bool(words)
-            and all(word in affirmative_words for word in words)
-        )
-
-        is_negative = (
-            bool(words)
-            and all(word in negative_words for word in words)
-        )
-
-        # User confirms the order
-        if is_affirmative:
-            pending_confirmation.pop(session_id, None)
-
-            # Move to customer-name collection
-            waiting_for_name[session_id] = True
-
-            return {
-                "response": "Great! Before I place your order, may I know your name?",
-                "actions": []
-            }
-
-        # User does not want to confirm yet
-        elif is_negative:
-            pending_confirmation.pop(session_id, None)
-
-            return {
-                "response": "No problem. What would you like to add or change?",
-                "actions": []
-            }
-
-        # Explicit order confirmation
-        elif normalized in ["place order", "confirm", "proceed"]:
-            pending_confirmation.pop(session_id, None)
-            waiting_for_name[session_id] = True
-
-            return {
-                "response": "Before I place your order, may I know your name?",
-                "actions": []
-            }
-
-    if name_confirmation_pending.get(session_id):
-        tentative = name_confirmation_pending.pop(session_id)
-        normalized = re.sub(
-            r"[^a-zA-Z\s]",
-            "",
-            message_lower
-        ).strip()
-
-        words = normalized.split()
-
-        affirmative_words = {
-            "yes", "y", "yeah", "yep", "yup",
-            "sure", "correct", "right",
-            "okay", "ok", "haan", "ha"
-        }
-
-        is_affirmative = (
-            bool(words)
-            and all(word in affirmative_words for word in words)
-        )
-
-        if is_affirmative:
-
+        if words and all(w in _NAME_YES for w in words):
+            # Confirmed – pop state and emit the place_order action once.
+            name_confirmation_pending.pop(session_id)
             cust_name = tentative
-
             customer_names[session_id] = cust_name
 
             return {
@@ -930,27 +916,162 @@ async def chat_endpoint(request: ChatRequest):
                     f"Thank you {cust_name}! "
                     "Your order has been confirmed."
                 ),
-                "actions": [
-                    {
-                        "action": "place_order",
-                        "customer": cust_name
-                    }
-                ]
+                "actions": [{"action": "place_order", "customer": cust_name}],
             }
 
-        else:
+        if words and all(w in _NAME_NO for w in words):
+            # Rejected – stay in name-collection mode.
+            name_confirmation_pending.pop(session_id)
+            waiting_for_name[session_id] = True
 
+            return {
+                "response": "No problem. Please tell me your name again.",
+                "actions": [],
+            }
+
+        # Ambiguous (e.g. customer typed something that is neither yes nor no) –
+        # preserve the pending name and re-ask rather than silently accepting.
+        # (name_confirmation_pending[session_id] is left intact.)
+        return {
+            "response": (
+                f'Just to confirm – is your name "{tentative}"? '
+                "Please reply yes or no."
+            ),
+            "actions": [],
+        }
+
+    # ── Step 3: Name-collection state ───────────────────────────────────────
+    # Treat the message as a name unless it is a cancel command.
+    if waiting_for_name.get(session_id):
+        waiting_for_name.pop(session_id)
+
+        _CANCEL_WORDS = {"cancel", "stop", "quit", "exit", "no"}
+        normalized_msg = re.sub(r"[^a-z\s]", "", message_lower).strip()
+        if normalized_msg in _CANCEL_WORDS:
+            return {
+                "response": (
+                    "Order cancelled. Let me know if you'd like to start again."
+                ),
+                "actions": [],
+            }
+
+        name_match = re.search(
+            r"(?:my name is|i am|i'm|this is|name is)\s+(.+)",
+            message,
+            re.IGNORECASE,
+        )
+        tentative = name_match.group(1).strip() if name_match else message.strip()
+        tentative = tentative or "Guest Customer"
+
+        name_confirmation_pending[session_id] = tentative
+
+        return {
+            "response": f'I heard your name as "{tentative}". Is that correct?',
+            "actions": [],
+        }
+
+    # ── Step 4: Pending-confirmation state ──────────────────────────────────
+    # A cart-item action was just processed; the AI asked if the customer is ready.
+    # Use semantic classifier so paraphrases ('go ahead', 'I'm ready', …) work.
+    _cached_intent: str = ""  # reused in step 5 to avoid a double LLM call
+
+    if pending_confirmation.get(session_id):
+        if not request.cart:
+            # Cart was cleared externally; abandon confirmation flow.
+            pending_confirmation.pop(session_id)
+        else:
+            _cached_intent = classify_order_intent(message)
+
+            if _cached_intent == "CONFIRM_ORDER":
+                pending_confirmation.pop(session_id)
+                waiting_for_name[session_id] = True
+
+                return {
+                    "response": (
+                        "Great! Before I place your order, "
+                        "may I know your name?"
+                    ),
+                    "actions": [],
+                }
+
+            if _cached_intent == "NEGATIVE":
+                pending_confirmation.pop(session_id)
+
+                return {
+                    "response": "No problem. What would you like to add or change?",
+                    "actions": [],
+                }
+
+            if _cached_intent == "UNCERTAIN":
+                # Do NOT place an order automatically when uncertain.
+                return {
+                    "response": (
+                        "I'm not sure what you mean. "
+                        "Would you like to place your order now, or make changes?"
+                    ),
+                    "actions": [],
+                }
+
+            # intent_label == "OTHER" – fall through to AI response below.
+
+    # ── Step 5: Fresh CONFIRM_ORDER intent (no prior pending state) ──────────
+    # Handles cases where the customer types a confirmation phrase without a
+    # preceding cart-modification step (e.g. direct "place order" button).
+    if request.cart:
+        # Reuse cached label from step 4 if available (avoids a second LLM call).
+        intent_label = _cached_intent if _cached_intent else classify_order_intent(message)
+
+        if intent_label == "CONFIRM_ORDER":
+            pending_confirmation.pop(session_id, None)
             waiting_for_name[session_id] = True
 
             return {
                 "response": (
-                    "No problem. "
-                    "Please tell me your name again."
+                    "Great! Before I place your order, "
+                    "may I know your name?"
                 ),
-                "actions": []
+                "actions": [],
             }
 
-  
+        if intent_label == "NEGATIVE":
+            return {
+                "response": "No problem. What would you like to add or change?",
+                "actions": [],
+            }
+
+        if intent_label == "UNCERTAIN":
+            return {
+                "response": (
+                    "I'm not sure what you mean. "
+                    "Would you like to place your order, or is there something "
+                    "else I can help with?"
+                ),
+                "actions": [],
+            }
+
+    # ── Step 6: AI conversational fallback ──────────────────────────────────
+    ai_reply = get_ai_response(session_id, message, cart_str)
+
+    # Honour ORDER CONFIRMED signal from the AI (legacy path kept for safety).
+    if "ORDER CONFIRMED" in ai_reply and request.cart:
+        pending_confirmation.pop(session_id, None)
+        waiting_for_name[session_id] = True
+        clean_reply = ai_reply.replace("ORDER CONFIRMED", "").strip()
+
+        return {
+            "response": clean_reply or (
+                "Great! Before I place your order, "
+                "may I know your name?"
+            ),
+            "actions": [],
+        }
+
+    return {
+        "response": ai_reply,
+        "actions": [],
+    }
+
+
 @app.post("/place_order")
 async def place_order(order: OrderRequest):
     try:
@@ -1119,16 +1240,37 @@ async def transcribe_audio(file: UploadFile = File(...)):
             )
 
         prompt_text = (
-            "This is an Indian English bakery ordering conversation. "
-            "Transcribe exactly what the customer says. "
-            "Common menu items include: Alfredo Spaghetti, Aloo Tikki, "
-            "Black Forest Cake, Blueberry Muffin, Butter Croissant, "
-            "Butterscotch Cake, Cheese Sandwich, Cheesy Garlic Bread, "
-            "Chocolate Cake, Chocolate Cupcake, Cold Coffee, "
-            "Mango Shake, Red Velvet Cake and Samosa. "
-            "Preserve quantities, customer names and item names accurately. "
-            "Do not paraphrase or summarize the customer's speech."
+            "Savoury & Sweet Co. bakery items: Samosa, Vada Pav, Aloo Tikki, Kachori, Veg Puff, Paneer Puff, "
+            "Masala Sandwich, Veg Sandwich, Cheese Sandwich, Cheesy Garlic Bread, Alfredo Spaghetti, "
+            "Chocolate Cake, Vanilla Cake, Butterscotch Cake, Black Forest Cake, Red Velvet Cake, "
+            "Butter Croissant, Chocolate Brownie, Cupcake, Chocolate Cupcake, Blueberry Muffin, "
+            "Muffin, Choco Chip Cookies, Cookies, Donut, Chocolate Donut, Cold Coffee, Chocolate Shake, Mango Shake."
         )
+
+        # Helper to validate and filter out Whisper subtitle hallucinations or empty outputs
+        def clean_and_validate_transcript(raw_text: str):
+            if not raw_text:
+                return None
+            cleaned = raw_text.strip()
+            lowered = cleaned.lower()
+            
+            # Common Whisper subtitle hallucinations on brief/silent audio
+            hallucination_triggers = [
+                "sous-titrage", "sous-titres", "subtitles", "thank you for watching",
+                "thanks for watching", "amara.org", "do not paraphrase", "mbc", "www.",
+                "captioned", "transcription by", "translated by", "copyright"
+            ]
+
+            if not cleaned or len(cleaned) < 2:
+                return None
+
+            if lowered in {"thank you", "thank you.", "thanks", "thanks.", "you", "you."}:
+                return None
+
+            if any(h in lowered for h in hallucination_triggers):
+                return None
+
+            return cleaned
 
         # 1. Try Groq Whisper API if GROQ_API_KEY is configured
         if GROQ_API_KEY:
@@ -1141,11 +1283,19 @@ async def transcribe_audio(file: UploadFile = File(...)):
                     model="whisper-large-v3-turbo",
                     response_format="json",
                     language="en",
+                    temperature=0.0,
                     prompt=prompt_text
                 )
                 text = transcription.text if hasattr(transcription, 'text') else str(transcription)
-                print(f"[WHISPER] Groq transcription success: {text}")
-                return JSONResponse(content={"transcript": text})
+                valid_text = clean_and_validate_transcript(text)
+                if not valid_text:
+                    print(f"[WHISPER] Rejected empty or hallucinated transcript: {text!r}")
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "Could not recognize clear speech from audio. Please speak again."}
+                    )
+                print(f"[WHISPER] Groq transcription success: {valid_text}")
+                return JSONResponse(content={"transcript": valid_text})
             except Exception as e:
                 print(f"[WHISPER] Groq Whisper error: {e}")
                 traceback.print_exc()
@@ -1166,11 +1316,19 @@ async def transcribe_audio(file: UploadFile = File(...)):
                     model="whisper-1",
                     file=(filename, audio_bytes),
                     language="en",
+                    temperature=0.0,
                     prompt=prompt_text
                 )
                 text = transcription.text
-                print(f"[WHISPER] OpenAI transcription success: {text}")
-                return JSONResponse(content={"transcript": text})
+                valid_text = clean_and_validate_transcript(text)
+                if not valid_text:
+                    print(f"[WHISPER] Rejected empty or hallucinated transcript: {text!r}")
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "Could not recognize clear speech from audio. Please speak again."}
+                    )
+                print(f"[WHISPER] OpenAI transcription success: {valid_text}")
+                return JSONResponse(content={"transcript": valid_text})
             except Exception as e:
                 print(f"[WHISPER] OpenAI Whisper error: {e}")
                 traceback.print_exc()

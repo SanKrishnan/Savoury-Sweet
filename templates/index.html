@@ -867,128 +867,28 @@ let audioChunks       = [];
 
 // ════════════════════════════════════════════════════════
 // VOICE TURN STATE MACHINE
-// IDLE → RECORDING → FINAL TRANSCRIPT → SHOW → WAIT 300ms
-// → SUBMITTING → WAIT /chat → RESPONSE COMPLETE → IDLE
-// Queues subsequent turns if a /chat is already in flight.
-// ════════════════════════════════════════════════════════
-let voiceTurnSeq = 0;
-let activeVoiceTurnId = null;       // turn currently recording / pending 300ms timer
-let pendingTimerTurnId = null;      // turnId owned by the active 300ms timer
-let pendingAutoSubmitTimer = null;
-let chatInFlight = false;           // true while a /chat request is outstanding
-let voiceTurnQueue = [];            // [{ turnId, transcript }] waiting for chatInFlight to clear
-const committedTurnIds = new Set(); // turns already submitted (prevent double-send)
+let chatInFlight = false;
 
-function nextVoiceTurnId() {
-    voiceTurnSeq += 1;
-    return voiceTurnSeq;
-}
-
-function cancelPendingTimer(reason) {
-    if (pendingAutoSubmitTimer !== null) {
-        clearTimeout(pendingAutoSubmitTimer);
-        pendingAutoSubmitTimer = null;
-        const cancelledId = pendingTimerTurnId;
-        pendingTimerTurnId = null;
-        console.log("[VOICE] pending timer cancelled", reason || "", "id=" + cancelledId);
-    }
-}
-
-/** Called when a NEW recording starts: invalidate stale timer only. Does NOT cancel in-flight /chat. */
-function beginVoiceRecording() {
-    cancelPendingTimer("new-recording");
-    activeVoiceTurnId = nextVoiceTurnId();
-    // Cancel TTS so it cannot interfere with the next mic capture
-    if (window.speechSynthesis) {
-        try { window.speechSynthesis.cancel(); } catch (e) {}
-    }
-    console.log("[VOICE] TURN START id=" + activeVoiceTurnId);
-    return activeVoiceTurnId;
-}
-
-/**
- * Final transcript ready → show in input → wait 300ms → commit once.
- * Editing the input, manual Send, or a new recording before 300ms cancels this turn's timer.
- */
-function onFinalTranscript(transcript, turnId) {
+function onFinalTranscript(transcript) {
     const text = (transcript || "").trim();
     if (!text) {
-        console.log("[VOICE] empty final transcript id=" + turnId);
-        return;
-    }
-    // Only accept if this is still the active recording turn (not superseded)
-    if (turnId !== activeVoiceTurnId) {
-        console.log("[VOICE] stale final transcript ignored id=" + turnId + " active=" + activeVoiceTurnId);
+        console.log("[VOICE] Empty transcript received, skipping auto-submit");
         return;
     }
     messageInput.value = text;
-    console.log("[VOICE] FINAL TRANSCRIPT id=" + turnId + ' text="' + text + '"');
-
-    cancelPendingTimer("reschedule");
-    pendingTimerTurnId = turnId;
-    console.log("[VOICE] AUTO-SUBMIT SCHEDULED id=" + turnId + " delay=300ms");
-    pendingAutoSubmitTimer = setTimeout(() => {
-        pendingAutoSubmitTimer = null;
-        // Stale timer guard: only commit if this timer still owns the turn
-        if (pendingTimerTurnId !== turnId) {
-            console.log("[VOICE] stale timer ignored id=" + turnId);
-            return;
-        }
-        pendingTimerTurnId = null;
-        // After 300ms the turn is committed — use the text captured at schedule time
-        // (user may have edited; if they edited, the input listener already cancelled)
-        const committed = messageInput.value.trim() || text;
-        console.log("[VOICE] AUTO-SUBMIT COMMITTED id=" + turnId);
-        enqueueOrSubmitVoiceTurn(committed, turnId);
-    }, 300);
-}
-
-/** Cancel the pending 300ms auto-submit for the active turn (edit / manual Send). */
-function cancelAutoSubmit() {
-    cancelPendingTimer("user-cancel");
-}
-
-/**
- * Enqueue or submit a committed voice turn.
- * Serialization is owned by sendMessage() (shared chatInFlight for voice + manual).
- * Never submits the same turnId twice.
- */
-function enqueueOrSubmitVoiceTurn(transcript, turnId) {
-    const text = (transcript || "").trim();
-    if (!text) return;
-    if (committedTurnIds.has(turnId)) {
-        console.log("[VOICE] turn already committed, skip id=" + turnId);
-        return;
-    }
-    // Always go through submitVoiceTurn; sendMessage serializes if /chat is busy
+    console.log("[VOICE] Transcript set in input box:", text);
+    
     if (chatInFlight) {
-        console.log("[VOICE] queued turn id=" + turnId);
-    }
-    submitVoiceTurn(text, turnId);
-}
-
-async function submitVoiceTurn(transcript, turnId) {
-    if (committedTurnIds.has(turnId)) {
-        console.log("[VOICE] turn already committed, skip id=" + turnId);
+        console.log("[VOICE] /chat request already in flight, skipping auto-submit");
         return;
     }
-    // Only voice turns that actually enter submitVoiceTurn are marked committed
-    committedTurnIds.add(turnId);
-    console.log("[VOICE] submitting turn id=" + turnId);
-    console.log("[CHAT] REQUEST START id=" + turnId);
-    try {
-        // sendMessage owns chatInFlight for ALL /chat traffic (voice + manual)
-        await sendMessage(transcript, turnId);
-    } finally {
-        console.log("[CHAT] RESPONSE COMPLETE id=" + turnId);
-        console.log("[VOICE] TURN COMPLETE id=" + turnId);
-    }
+    console.log("[VOICE] Auto-submitting transcript to /chat:", text);
+    sendMessage(text);
 }
 
 // ── Browser STT path ────────────────────────────────────
 let browserRecognition = null;
 let speechBuffer = "";
-let browserTurnId = null;
 
 function startBrowserSTT() {
     if (!SpeechRecognitionAPI) {
@@ -1000,10 +900,10 @@ function startBrowserSTT() {
         return;
     }
 
-    // New turn: invalidate stale timer only; do NOT cancel in-flight /chat
-    browserTurnId = beginVoiceRecording();
+    if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
 
-    // Stop any previous recognition instance
     if (browserRecognition) {
         try {
             browserRecognition.onend = null;
@@ -1014,29 +914,21 @@ function startBrowserSTT() {
         browserRecognition = null;
     }
 
-    // Fresh utterance
     speechBuffer = "";
-    messageInput.value = "";
 
     browserRecognition = new SpeechRecognitionAPI();
-
-    // continuous=false: one utterance, ends on silence.
-    // Interim results display only; final transcript enters the voice-turn pipeline.
     browserRecognition.continuous = false;
     browserRecognition.interimResults = true;
     browserRecognition.maxAlternatives = 1;
 
-    browserRecognition.lang =
-        (accentSelect && accentSelect.value)
-            ? accentSelect.value
-            : "en-IN";
+    browserRecognition.lang = (accentSelect && accentSelect.value) ? accentSelect.value : "en-IN";
 
-    console.log("[VOICE] Browser STT started id=" + browserTurnId + " lang=", browserRecognition.lang);
+    console.log("[VOICE] Browser STT started (lang=" + browserRecognition.lang + ")");
 
     browserRecognition.onstart = () => {
         isRecording = true;
         micBtn.classList.add("recording");
-        console.log("[VOICE] microphone started (browser STT) id=" + browserTurnId);
+        console.log("[VOICE] Microphone active (Browser STT)");
     };
 
     browserRecognition.onresult = (event) => {
@@ -1044,11 +936,8 @@ function startBrowserSTT() {
         let interimText = "";
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript =
-                event.results[i][0].transcript.trim();
-
+            const transcript = event.results[i][0].transcript.trim();
             if (!transcript) continue;
-
             if (event.results[i].isFinal) {
                 finalText += (finalText ? " " : "") + transcript;
             } else {
@@ -1057,55 +946,31 @@ function startBrowserSTT() {
         }
 
         speechBuffer = finalText;
-
-        // Interim + partial final shown in input only — NEVER submit from onresult
-        const displayText =
-            (finalText + (interimText ? " " + interimText : "")).trim();
-
+        const displayText = (finalText + (interimText ? " " + interimText : "")).trim();
         messageInput.value = displayText;
     };
 
     browserRecognition.onerror = (event) => {
-        console.error("[VOICE] Browser STT error id=" + browserTurnId + ":", event.error);
-
-        if (
-            event.error === "not-allowed" ||
-            event.error === "service-not-allowed"
-        ) {
-            appendMessage(
-                "Microphone permission was denied.",
-                false
-            );
+        console.error("[VOICE] Browser STT error:", event.error);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            appendMessage("Microphone permission was denied.", false);
+        } else if (event.error === "audio-capture") {
+            appendMessage("No microphone was detected.", false);
         }
-
-        if (event.error === "audio-capture") {
-            appendMessage(
-                "No microphone was detected.",
-                false
-            );
-        }
-
         isRecording = false;
         micBtn.classList.remove("recording");
-        // Error ends this turn's timer if any
-        if (pendingTimerTurnId === browserTurnId) {
-            cancelPendingTimer("stt-error");
-        }
     };
 
     browserRecognition.onend = () => {
-        console.log("[VOICE] Browser STT ended id=" + browserTurnId);
+        console.log("[VOICE] Browser STT ended");
         isRecording = false;
         micBtn.classList.remove("recording");
-        // Only the FINAL transcript enters the auto-submit pipeline
         if (speechBuffer && speechBuffer.trim()) {
-            onFinalTranscript(speechBuffer.trim(), browserTurnId);
+            onFinalTranscript(speechBuffer.trim());
         }
     };
 
     try {
-        // IMPORTANT: Do NOT call getUserMedia() here.
-        // Browser SpeechRecognition handles the microphone itself.
         browserRecognition.start();
     } catch (error) {
         console.error("[VOICE] Could not start Browser STT:", error);
@@ -1115,12 +980,10 @@ function startBrowserSTT() {
 }
 
 // ── Whisper STT path (server-side, high accuracy) ───────
-let whisperTurnId = null;
-
 async function startWhisperSTT() {
-    // New turn: invalidate stale timer only; do NOT cancel in-flight /chat
-    whisperTurnId = beginVoiceRecording();
-    console.log("[VOICE] Whisper STT handler started id=" + whisperTurnId);
+    if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
 
     if (!navigator.mediaDevices || !window.MediaRecorder) {
         console.warn("[VOICE] MediaRecorder not supported.");
@@ -1137,9 +1000,7 @@ async function startWhisperSTT() {
         }
 
         audioChunks = [];
-        const capturedTurnId = whisperTurnId;
 
-        // Determine best supported MIME type dynamically across browsers/mobile
         let mimeType = 'audio/webm';
         if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
             mimeType = 'audio/webm;codecs=opus';
@@ -1152,7 +1013,6 @@ async function startWhisperSTT() {
         } else if (MediaRecorder.isTypeSupported('audio/wav')) {
             mimeType = 'audio/wav';
         }
-        console.log("[VOICE] MediaRecorder MIME type:", mimeType);
 
         mediaRecorder = new MediaRecorder(stream, { mimeType });
 
@@ -1163,14 +1023,13 @@ async function startWhisperSTT() {
         };
 
         mediaRecorder.onstop = async () => {
-            console.log("[VOICE] recording stopped id=" + capturedTurnId);
+            console.log("[VOICE] Whisper recording stopped");
             stream.getTracks().forEach(t => t.stop());
             isRecording = false;
             micBtn.classList.remove('recording');
 
             const actualMime = mediaRecorder.mimeType || mimeType;
             const blob = new Blob(audioChunks, { type: actualMime });
-            console.log("[VOICE] audio blob size:", blob.size);
 
             if (blob.size === 0) {
                 console.error("[VOICE] Recorded audio blob is empty (0 bytes)");
@@ -1184,17 +1043,12 @@ async function startWhisperSTT() {
             const formData = new FormData();
             formData.append('file', blob, filename);
 
-            console.log("[VOICE] sending /transcribe id=" + capturedTurnId);
             try {
                 const res = await fetch('/transcribe', { method: 'POST', body: formData });
-                console.log("[VOICE] /transcribe status=", res.status);
                 const data = await res.json();
 
                 if (res.ok && data.transcript) {
-                    // Preserve exact STT transcript; same downstream pipeline as Browser STT
-                    // Do NOT call sendMessage() here — go through onFinalTranscript
-                    messageInput.value = data.transcript;
-                    onFinalTranscript(data.transcript, capturedTurnId);
+                    onFinalTranscript(data.transcript);
                 } else {
                     const errDetail = data.error || data.detail || `Server returned status ${res.status}`;
                     console.error("[VOICE] Whisper error:", errDetail);
@@ -1206,10 +1060,10 @@ async function startWhisperSTT() {
             }
         };
 
-        mediaRecorder.start();
+        mediaRecorder.start(100);
         isRecording = true;
         micBtn.classList.add('recording');
-        console.log("[VOICE] recording started (Whisper) id=" + capturedTurnId);
+        console.log("[VOICE] Recording started (Whisper)");
     } catch (err) {
         console.error("[VOICE] Exception in startWhisperSTT:", err);
         isRecording = false;
@@ -1222,7 +1076,6 @@ function stopWhisperSTT() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
     }
-    // isRecording / UI cleared inside onstop
 }
 
 micBtn.addEventListener('click', () => {
@@ -1348,39 +1201,23 @@ function handleActions(actions) {
 }
 
 /**
- * Central /chat path used by BOTH voice turns and manual Send.
- * Serializes all requests via chatInFlight so no two /chat calls run concurrently.
- * If a request arrives while one is in flight, it is queued and run after.
+ * Central /chat path used by manual Send button / submit.
+ * Serializes requests via chatInFlight so no two /chat calls run concurrently.
  */
-async function sendMessage(text, turnId) {
-    if (!text.trim()) return;
+async function sendMessage(text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return;
 
-    // If another /chat is in flight, queue this job and wait
     if (chatInFlight) {
-        const label = turnId != null ? ("voice id=" + turnId) : "manual";
-        console.log("[CHAT] queued (" + label + ") — waiting for in-flight request");
-        await new Promise((resolve, reject) => {
-            voiceTurnQueue.push({
-                kind: "chat",
-                text: text,
-                turnId: turnId,
-                resolve: resolve,
-                reject: reject
-            });
-        });
+        console.log("[CHAT] Request already in flight, ignoring duplicate submit.");
         return;
     }
 
-    // Manual Send cancels any pending voice timer so the same transcript is not double-sent
-    cancelAutoSubmit();
     chatInFlight = true;
-    appendMessage(text, true);
+    appendMessage(trimmed, true);
     messageInput.value = "";
     typingIndicator.classList.remove("hidden");
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    if (turnId == null) {
-        console.log("[CHAT] REQUEST START (manual) text=" + text);
-    }
 
     try {
         const res = await fetch("/chat", {
@@ -1389,7 +1226,7 @@ async function sendMessage(text, turnId) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                message: text,
+                message: trimmed,
                 cart: cart
             })
         });
@@ -1419,8 +1256,6 @@ async function sendMessage(text, turnId) {
         if (typeof data.response === "string" && data.response.trim().length > 0) {
             appendMessage(data.response);
             speak(data.response);
-        } else {
-            console.warn("[CHAT] Response string missing in data payload:", data);
         }
     } catch (err) {
         typingIndicator.classList.add("hidden");
@@ -1431,42 +1266,14 @@ async function sendMessage(text, turnId) {
         );
     } finally {
         chatInFlight = false;
-        // Drain queue: next voice or manual job, one at a time
-        if (voiceTurnQueue.length > 0) {
-            const next = voiceTurnQueue.shift();
-            if (next.kind === "chat") {
-                // Queued sendMessage waiter — run the actual request then resolve its promise
-                console.log("[CHAT] draining queued request" + (next.turnId != null ? (" id=" + next.turnId) : " (manual)"));
-                try {
-                    await sendMessage(next.text, next.turnId);
-                    if (next.resolve) next.resolve();
-                } catch (e) {
-                    if (next.reject) next.reject(e);
-                }
-            } else if (next.turnId != null) {
-                // Legacy voice queue shape { turnId, transcript }
-                console.log("[VOICE] submitting queued turn id=" + next.turnId);
-                await submitVoiceTurn(next.transcript, next.turnId);
-            }
-        }
     }
 }
 
 chatForm.addEventListener('submit', e => {
     e.preventDefault();
-    // Manual Send cancels pending voice auto-submit only (does NOT mark voice turn committed)
-    cancelAutoSubmit();
     const text = messageInput.value.trim();
     if (text) {
-        // Participates in the same chatInFlight serialization as voice turns
         sendMessage(text);
-    }
-});
-
-// Editing the transcript during the 300ms window cancels that voice auto-submit
-messageInput.addEventListener('input', () => {
-    if (pendingAutoSubmitTimer !== null) {
-        cancelAutoSubmit();
     }
 });
 
